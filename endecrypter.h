@@ -1,3 +1,10 @@
+/*
+ * SaveData En/Decrypter on PC (GPLv3+)
+ * kirk-engine (C) draan / proxima
+ * jpcsp (C) jpcsp team, especially CryptoEngine by hykem
+ * ported by popsdeco (aka @cielavenir)
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
