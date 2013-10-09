@@ -655,25 +655,24 @@ int i;
         //return hash;
     }
 
-    void UpdateSavedataHashes(/*PSF psf,*/ byte* data, int size) {
+    void UpdateSavedataHashes(byte* savedataParams, byte* data, int size) {
         // Setup the params, hashes, modes and key (empty).
-        byte savedataParams[0x80];
         byte key[0x10];memset(key,0,sizeof(key));
         byte hash_0x70[0x10];memset(hash_0x70,0,sizeof(hash_0x70));
         byte hash_0x20[0x10];
         byte hash_0x10[0x10];
         int mode = 2;
         int check_bit = 1;
-        /*
+
         // Check for previous SAVEDATA_PARAMS data in the file.
-        Object savedataParamsOld = psf.get("SAVEDATA_PARAMS");
-        if (savedataParamsOld != null) {
+        //Object savedataParamsOld = psf.get("SAVEDATA_PARAMS");
+        //if (savedataParamsOld != null) {
             // Extract the mode setup from the already existing data.
-            byte[] savedataParamsOldArray = (byte[]) savedataParamsOld;
-            mode = ((savedataParamsOldArray[0] >> 4) & 0xF);
-            check_bit = ((savedataParamsOldArray[0]) & 0xF);
-        }
-        */
+            //byte[] savedataParamsOldArray = (byte[]) savedataParamsOld;
+            mode = ((savedataParams[0] >> 4) & 0xF);
+            check_bit = ((savedataParams[0]) & 0xF);
+        //}
+
         if (((mode & 0x2) == 0x2) || ((mode & 0x4) == 0x4)) {
             if ((check_bit & 0x1) == 0x1) {
                 // Generate a type 2 hash.
@@ -716,6 +715,16 @@ int i;
         //}
     }
 
+unsigned int read32(const void *p){
+	const unsigned char *x=(const unsigned char*)p;
+	return x[0]|(x[1]<<8)|(x[2]<<16)|(x[3]<<24);
+}
+
+unsigned short read16(const void *p){
+	const unsigned char *x=(const unsigned char*)p;
+	return x[0]|(x[1]<<8);
+}
+
 int main(int argc, char **argv){
 	kirk_init();
 	initstdio();
@@ -733,8 +742,34 @@ int main(int argc, char **argv){
 	}
 
 	if(argc>3){ //enc. argv[3]=PARAM.SFO.
-		EncryptSavedata(inbuf, size, key);
-		fwrite(inbuf,1,size+0x10,stdout);
+		f=fopen(argv[3],"r+b");
+		if(f){
+			int sfosize=filelength(fileno(f));
+			char *p=malloc(sfosize);
+			char *param=malloc(0x80);
+			fread(p,1,sfosize,f);
+			fclose(f);
+			if(memcmp(p,"\0PSF",4)||read32(p+4)!=0x00000101)return 1;
+
+			int label_offset=read32(p+8);
+			int data_offset=read32(p+12);
+			int nlabel=read32(p+16);
+			int i=0;
+			for(;i<nlabel;i++){
+				if(!strcmp(p+label_offset+read16(p+20+16*i),"SAVEDATA_PARAMS")){ //seems to be 0x80bytes long
+					int datasize=read32(p+20+16*i+8);
+					//if(datasize>19)datasize=19;
+					memcpy(param,p+data_offset+read32(p+20+16*i+12),datasize);
+					fwrite(param,1,datasize,stdout);
+					//EncryptSavedata(inbuf, size, key);
+					//fwrite(inbuf,1,size+0x10,stdout);
+					UpdateSavedataHashes(param,inbuf,size);
+					fwrite(param,1,datasize,stdout);
+					break;
+				}
+			}
+		}
+
 	}else{
 		DecryptSavedata(inbuf, size, key);
 		fwrite(inbuf,1,alignedSize-0x10,stdout);
