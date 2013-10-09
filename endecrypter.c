@@ -81,10 +81,13 @@ bool isNullKey(byte *key) {
 */
 
         // Set the the data size to size.
+		*(int*)(buf+16)=size;
+/*
         buf[16] = (byte) ((size >> 24) & 0xFF);
         buf[17] = (byte) ((size >> 16) & 0xFF);
         buf[18] = (byte) ((size >> 8) & 0xFF);
         buf[19] = (byte) (size & 0xFF);
+*/
 
         sceUtilsBufferCopyWithRange(buf, size, buf, size, kirk_code);
     }
@@ -748,7 +751,6 @@ int main(int argc, char **argv){
 			char *p=malloc(sfosize);
 			char *param=malloc(0x80);
 			fread(p,1,sfosize,f);
-			fclose(f);
 			if(memcmp(p,"\0PSF",4)||read32(p+4)!=0x00000101)return 1;
 
 			int label_offset=read32(p+8);
@@ -765,9 +767,12 @@ int main(int argc, char **argv){
 					//fwrite(inbuf,1,size+0x10,stdout);
 					UpdateSavedataHashes(param,inbuf,size);
 					fwrite(param,1,datasize,stdout);
+					//fseek(f,data_offset+read32(p+20+16*i+12),SEEK_SET);
+					//fwrite(param,1,0x80,f);
 					break;
 				}
 			}
+			fclose(f);
 		}
 
 	}else{
