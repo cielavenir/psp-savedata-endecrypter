@@ -113,9 +113,9 @@ int i;
 
         // Key generator mode 0x1 (encryption): use an encrypted pseudo random number before XORing the data with the given key.
         if (genMode == 0x1) {
-            byte header[0x14 + 0x2C];
-            byte seed[0x14];
-            byte tmp[0x2C];
+            byte header[0x14 + 0x2C];memset(header,0,sizeof(header));
+            byte seed[0x14];memset(seed,0,sizeof(seed));
+            byte tmp[0x2C];memset(tmp,0,sizeof(tmp));
 
             sceUtilsBufferCopyWithRange(seed, 0x14, NULL, 0, 0xE);
             
@@ -327,12 +327,12 @@ int i;
         }
 
         // Setup the buffers.           
-        byte scrambleEmptyBuf[0x10 + 0x14];
-        byte keyBuf[0x10];
-        byte scrambleKeyBuf[0x10 + 0x14];
-        byte resultBuf[0x10];
-        byte scrambleResultBuf[0x10 + 0x14];
-        byte scrambleResultKeyBuf[0x10 + 0x14];
+        byte scrambleEmptyBuf[0x10 + 0x14];memset(scrambleEmptyBuf,0,sizeof(scrambleEmptyBuf));
+        byte keyBuf[0x10];memset(keyBuf,0,sizeof(keyBuf));
+        byte scrambleKeyBuf[0x10 + 0x14];memset(scrambleKeyBuf,0,sizeof(scrambleKeyBuf));
+        byte resultBuf[0x10];memset(resultBuf,0,sizeof(resultBuf));
+        byte scrambleResultBuf[0x10 + 0x14];memset(scrambleResultBuf,0,sizeof(scrambleResultBuf));
+        byte scrambleResultKeyBuf[0x10 + 0x14];memset(scrambleResultKeyBuf,0,sizeof(scrambleResultKeyBuf));
 
         // Calculate the seed.
         int seed = 0;
@@ -443,9 +443,9 @@ int i;
         }
 
         int finalSeed = 0;
-        byte dataBuf[length + 0x14];
-        byte keyBuf[0x10 + 0x10];
-        byte hashBuf[0x10];
+        byte dataBuf[length + 0x14];memset(dataBuf,0,sizeof(dataBuf));
+        byte keyBuf[0x10 + 0x10];memset(keyBuf,0,sizeof(keyBuf));
+        byte hashBuf[0x10];memset(hashBuf,0,sizeof(hashBuf));
 
         // Copy the hash stored by hleSdCreateList.
         arraycopy(ctx->buf, 0, dataBuf, 0x14, 0x10);
@@ -547,8 +547,8 @@ int i;
     void DecryptSavedata(byte *buf, int size, byte *key) {
         // Initialize the context structs.
         int sdDecMode;
-        _SD_Ctx1 ctx1;
-        _SD_Ctx2 ctx2;
+        _SD_Ctx1 ctx1;memset(&ctx1,0,sizeof(ctx1));
+        _SD_Ctx2 ctx2;memset(&ctx2,0,sizeof(ctx2));
 
         // Setup the buffers.
         int alignedSize = ((size + 0xF) >> 4) << 4;
@@ -592,14 +592,14 @@ int i;
     void EncryptSavedata(byte* buf, int size, byte *key) {
         // Initialize the context structs.
         int sdEncMode;
-        _SD_Ctx1 ctx1;
-        _SD_Ctx2 ctx2;
+        _SD_Ctx1 ctx1;memset(&ctx1,0,sizeof(ctx1));
+        _SD_Ctx2 ctx2;memset(&ctx2,0,sizeof(ctx2));
 
         // Setup the buffers.
         int alignedSize = ((size + 0xF) >> 4) << 4;
         byte tmpbuf1[alignedSize + 0x10];memset(tmpbuf1,0,sizeof(tmpbuf1));
-        byte tmpbuf2[alignedSize];
-        byte hash[0x10];
+        byte tmpbuf2[alignedSize];memset(tmpbuf2,0,sizeof(tmpbuf2));
+        byte hash[0x10];memset(hash,0,sizeof(hash));
 
         // Copy the plain data to tmpbuf.
         arraycopy(buf, 0, tmpbuf1, 0x10, size);
@@ -647,7 +647,7 @@ int i;
     }
 
     void GenerateSavedataHash(byte *data, int size, int mode, byte* key, byte *hash) {
-        _SD_Ctx1 ctx1;
+        _SD_Ctx1 ctx1;memset(&ctx1,0,sizeof(ctx1));
         int alignedSize = (((size + 0xF) >> 4) << 4);
 
         // Generate a new hash using a key.
@@ -662,8 +662,8 @@ int i;
         // Setup the params, hashes, modes and key (empty).
         byte key[0x10];memset(key,0,sizeof(key));
         byte hash_0x70[0x10];memset(hash_0x70,0,sizeof(hash_0x70));
-        byte hash_0x20[0x10];
-        byte hash_0x10[0x10];
+        byte hash_0x20[0x10];memset(hash_0x20,0,sizeof(hash_0x20));
+        byte hash_0x10[0x10];memset(hash_0x10,0,sizeof(hash_0x10));
         int mode = 2;
         int check_bit = 1;
 
@@ -734,7 +734,7 @@ int main(int argc, char **argv){
 	FILE *f=fopen(argv[1],"rb");
 	int size=filelength(fileno(f));
 	int alignedSize = ((size + 0xF) >> 4) << 4;
-	char *inbuf=malloc(size+0x10);
+	char *inbuf=calloc(size+0x10,1);
 	fread(inbuf,1,size,f);
 	fclose(f);
 	byte key[16];memset(key,0,16);
@@ -749,7 +749,6 @@ int main(int argc, char **argv){
 		if(f){
 			int sfosize=filelength(fileno(f));
 			char *p=malloc(sfosize);
-			char *param=malloc(0x80);
 			fread(p,1,sfosize,f);
 			if(memcmp(p,"\0PSF",4)||read32(p+4)!=0x00000101)return 1;
 
@@ -758,17 +757,19 @@ int main(int argc, char **argv){
 			int nlabel=read32(p+16);
 			int i=0;
 			for(;i<nlabel;i++){
-				if(!strcmp(p+label_offset+read16(p+20+16*i),"SAVEDATA_PARAMS")){ //seems to be 0x80bytes long
+				if(!strcmp(p+label_offset+read16(p+20+16*i),"SAVEDATA_PARAMS")){
+					//THIS CODE DOESN'T SEEM WORKING. DAMN IT...
 					int datasize=read32(p+20+16*i+8);
-					//if(datasize>19)datasize=19;
-					memcpy(param,p+data_offset+read32(p+20+16*i+12),datasize);
-					fwrite(param,1,datasize,stdout);
-					//EncryptSavedata(inbuf, size, key);
-					//fwrite(inbuf,1,size+0x10,stdout);
-					UpdateSavedataHashes(param,inbuf,size);
-					fwrite(param,1,datasize,stdout);
-					//fseek(f,data_offset+read32(p+20+16*i+12),SEEK_SET);
-					//fwrite(param,1,0x80,f);
+					//fwrite(p+data_offset+read32(p+20+16*i+12),1,datasize,stdout);
+					EncryptSavedata(inbuf, size, key);
+					fwrite(inbuf,1,size+0x10,stdout);
+					UpdateSavedataHashes(p+data_offset+read32(p+20+16*i+12),inbuf,size+0x10);
+					//DecryptSavedata(inbuf, size+0x10, key);
+					//fwrite(inbuf,1,size,stdout);
+
+					//fwrite(p+data_offset+read32(p+20+16*i+12),1,datasize,stdout);
+					fseek(f,data_offset+read32(p+20+16*i+12),SEEK_SET);
+					fwrite(p+data_offset+read32(p+20+16*i+12),1,datasize,f);
 					break;
 				}
 			}
