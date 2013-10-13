@@ -581,7 +581,7 @@ int i;
         hleChnnlsv_21BE78B4(&ctx2);
         
         // Generate a file hash for this data.
-        //hleSdGetLastIndex(ctx1, hash, key);
+        //hleSdGetLastIndex(&ctx1, hash, key);
         
         // Copy back the data.
         arraycopy(tmpbuf, 0, buf, 0, alignedSize - 0x10);
@@ -589,7 +589,7 @@ int i;
         //return hash;
     }
 
-    void EncryptSavedata(byte* buf, int size, byte *key) {
+    void EncryptSavedata(byte* buf, int size, byte *key, byte *hash) {
         // Initialize the context structs.
         int sdEncMode;
         _SD_Ctx1 ctx1;memset(&ctx1,0,sizeof(ctx1));
@@ -599,7 +599,6 @@ int i;
         int alignedSize = ((size + 0xF) >> 4) << 4;
         byte tmpbuf1[alignedSize + 0x10];memset(tmpbuf1,0,sizeof(tmpbuf1));
         byte tmpbuf2[alignedSize];memset(tmpbuf2,0,sizeof(tmpbuf2));
-        byte hash[0x10];memset(hash,0,sizeof(hash));
 
         // Copy the plain data to tmpbuf.
         arraycopy(buf, 0, tmpbuf1, 0x10, size);
@@ -641,7 +640,7 @@ int i;
         hleChnnlsv_21BE78B4(&ctx2);
         
         // Generate a file hash for this data.
-        //hleSdGetLastIndex(ctx1, hash, key);
+        hleSdGetLastIndex(&ctx1, hash, key);
 
         //return hash;
     }
@@ -731,6 +730,19 @@ unsigned short read16(const void *p){
 int main(int argc, char **argv){
 	kirk_init();
 	initstdio();
+	if(argc<2){
+		fprintf(stderr,
+			"[Proof of Concept/beta] PSP Savedata En/Decrypter on PC (GPLv3+)\n"
+			"kirk-engine (C) draan / proxima\n"
+			"jpcsp (C) jpcsp team, especially CryptoEngine by hykem\n"
+			"ported by popsdeco\n"
+			"\n"
+			"Decrypt: endecrypter ENC.bin GAMEKEY.bin > DEC.bin\n"
+			"Encrypt: endecrypter DEC.bin GAMEKEY.bin PARAM.SFO > ENC.bin\n"
+			"Please note that PARAM.SFO is overwritten in encryption.\n"
+		);
+		return 1;
+	}
 	FILE *f=fopen(argv[1],"rb");
 	int size=filelength(fileno(f));
 	int alignedSize = ((size + 0xF) >> 4) << 4;
@@ -755,30 +767,37 @@ int main(int argc, char **argv){
 			int label_offset=read32(p+8);
 			int data_offset=read32(p+12);
 			int nlabel=read32(p+16);
-			int i=0;
+			int i=0,j=0;
 			for(;i<nlabel;i++){
 				if(!strcmp(p+label_offset+read16(p+20+16*i),"SAVEDATA_PARAMS")){
-					//THIS CODE DOESN'T SEEM WORKING. DAMN IT...
-					int datasize=read32(p+20+16*i+8);
-					//fwrite(p+data_offset+read32(p+20+16*i+12),1,datasize,stdout);
-					EncryptSavedata(inbuf, size, key);
-					fwrite(inbuf,1,size+0x10,stdout);
-					UpdateSavedataHashes(p+data_offset+read32(p+20+16*i+12),inbuf,size+0x10);
-					//DecryptSavedata(inbuf, size+0x10, key);
-					//fwrite(inbuf,1,size,stdout);
+					for(;j<nlabel;j++){
+						if(!strcmp(p+label_offset+read16(p+20+16*j),"SAVEDATA_FILE_LIST")){
+							int paramsize=read32(p+20+16*i+8);
+							//fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,stdout);
+							EncryptSavedata(inbuf, size, key, p+data_offset+read32(p+20+16*j+12)+0x0d);
+							fwrite(inbuf,1,size+0x10,stdout);
+							UpdateSavedataHashes(p+data_offset+read32(p+20+16*i+12),inbuf,size+0x10);
+							//DecryptSavedata(inbuf, size+0x10, key);
+							//fwrite(inbuf,1,size,stdout);
+							//fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,stdout);
 
-					//fwrite(p+data_offset+read32(p+20+16*i+12),1,datasize,stdout);
-					fseek(f,data_offset+read32(p+20+16*i+12),SEEK_SET);
-					fwrite(p+data_offset+read32(p+20+16*i+12),1,datasize,f);
+							//write back
+							fseek(f,data_offset+read32(p+20+16*i+12),SEEK_SET);
+							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,f);
+							fseek(f,data_offset+read32(p+20+16*j+12)+0x0d,SEEK_SET);
+							fwrite(p+data_offset+read32(p+20+16*j+12)+0x0d,1,0x10,f);
+							break;
+						}
+					}
 					break;
 				}
 			}
 			fclose(f);
 		}
-
 	}else{
 		DecryptSavedata(inbuf, size, key);
 		fwrite(inbuf,1,alignedSize-0x10,stdout);
 	}
+	free(inbuf);
 	return 0;
 }
