@@ -188,11 +188,11 @@ int i;
                 return 0;
             } else if (ctx->mode == 0x6) { // Encryption mode 0x6: XOR with new SD keys, encrypt with KIRK CMD5 and XOR with the given key.
                 for (i = 0; i < 0x10; i++) {
-                    header[0x14 + 0xC + i] = (byte) (header[0x14 + 0xC + i] ^ sdHashKey3[i]);
+                    header[0x14 + 0xC + i] = (byte) (header[0x14 + 0xC + i] ^ sdHashKey6[i]);
                 }
                 ScrambleSD(header, 0x10, 0x100, 0x4, 0x05);
                 for (i = 0; i < 0x10; i++) {
-                    header[0xC + i] = (byte) (header[0xC + i] ^ sdHashKey4[i]);
+                    header[0xC + i] = (byte) (header[0xC + i] ^ sdHashKey7[i]);
                 }
                 arraycopy(header, 0xC, ctx->buf, 0, 0x10);
                 arraycopy(header, 0xC, data, 0, 0x10);
@@ -461,21 +461,21 @@ int i;
         } else if (ctx->mode == 0x3) {
             // Decryption mode 0x03: XOR the hash with SD keys and decrypt with KIRK CMD7.
             for (i = 0; i < 0x10; i++) {
-                dataBuf[0x14 + i] = (byte) (dataBuf[0x14 + i] ^ sdHashKey3[i]);
+                dataBuf[0x14 + i] = (byte) (dataBuf[0x14 + i] ^ sdHashKey4[i]);
             }
             ScrambleSD(dataBuf, 0x10, 0xE, 5, 0x07);
             for (i = 0; i < 0x10; i++) {
-                dataBuf[i] = (byte) (dataBuf[i] ^ sdHashKey4[i]);
+                dataBuf[i] = (byte) (dataBuf[i] ^ sdHashKey3[i]);
             }
             finalSeed = 0x57;
         } else if (ctx->mode == 0x4) {
             // Decryption mode 0x04: XOR the hash with SD keys and decrypt with KIRK CMD8.
             for (i = 0; i < 0x10; i++) {
-                dataBuf[0x14 + i] = (byte) (dataBuf[0x14 + i] ^ sdHashKey3[i]);
+                dataBuf[0x14 + i] = (byte) (dataBuf[0x14 + i] ^ sdHashKey4[i]);
             }
             ScrambleSD(dataBuf, 0x10, 0x100, 5, 0x08);
             for (i = 0; i < 0x10; i++) {
-                dataBuf[i] = (byte) (dataBuf[i] ^ sdHashKey4[i]);
+                dataBuf[i] = (byte) (dataBuf[i] ^ sdHashKey3[i]);
             }
             finalSeed = 0x57;
         } else if (ctx->mode == 0x6) {
@@ -647,11 +647,10 @@ int i;
 
     void GenerateSavedataHash(byte *data, int size, int mode, byte* key, byte *hash) {
         _SD_Ctx1 ctx1;memset(&ctx1,0,sizeof(ctx1));
-        int alignedSize = (((size + 0xF) >> 4) << 4);
 
         // Generate a new hash using a key.
         hleSdSetIndex(&ctx1, mode);
-        hleSdRemoveValue(&ctx1, data, alignedSize);
+        hleSdRemoveValue(&ctx1, data, size);
         hleSdGetLastIndex(&ctx1, hash, key);
         
         //return hash;
@@ -663,7 +662,7 @@ int i;
         byte hash_0x70[0x10];memset(hash_0x70,0,sizeof(hash_0x70));
         byte hash_0x20[0x10];memset(hash_0x20,0,sizeof(hash_0x20));
         byte hash_0x10[0x10];memset(hash_0x10,0,sizeof(hash_0x10));
-        int mode = 2;
+        int mode = 4;
         int check_bit = 1;
 
         // Check for previous SAVEDATA_PARAMS data in the file.
@@ -675,35 +674,34 @@ int i;
             check_bit = ((savedataParams[0]) & 0xF);
         //}
 
-        if (((mode & 0x2) == 0x2) || ((mode & 0x4) == 0x4)) {
-            if ((check_bit & 0x1) == 0x1) {
-                // Generate a type 2 hash.
-                GenerateSavedataHash(data, size, 2, key, hash_0x20);
-                // Set the SAVEDATA_PARAMS byte to 0x41.
-                savedataParams[0] |= 0x41;
-                // Generate a type 3 hash.
-                GenerateSavedataHash(data, size, 3, key, hash_0x70);
-                // Generate a type 1 hash.
-                GenerateSavedataHash(data, size, 1, key, hash_0x10);
-            } else {
-                // Generate a type 4 hash.
-                GenerateSavedataHash(data, size, 4, key, hash_0x20);
-                // Set the SAVEDATA_PARAMS byte to 0x21.
-                savedataParams[0] |= 0x21;
-                // Generate a type 3 hash.
-                GenerateSavedataHash(data, size, 3, key, hash_0x70);
-                // Generate a type 1 hash.
-                GenerateSavedataHash(data, size, 1, key, hash_0x10);
-            }
+        if ((mode & 0x4) == 0x4) {
+            // Generate a type 6 hash.
+            GenerateSavedataHash(data, size, 6, key, hash_0x20);
+			// Generate a type 5 hash.
+			GenerateSavedataHash(data, size, 5, key, hash_0x70);
+			// Set the SAVEDATA_PARAMS byte to 0x41.
+            savedataParams[0] |= 0x40;
+		} else if((mode & 0x2) == 0x2) {
+			// Generate a type 4 hash.
+            GenerateSavedataHash(data, size, 4, key, hash_0x20);
+            // Generate a type 3 hash.
+            GenerateSavedataHash(data, size, 3, key, hash_0x70);
+			// Set the SAVEDATA_PARAMS byte to 0x21.
+            savedataParams[0] |= 0x20;
         } else {
             // Generate a type 2 hash.
             GenerateSavedataHash(data, size, 2, key, hash_0x20);
-            // Set the SAVEDATA_PARAMS bit to 1.
-            savedataParams[0] |= 0x01;
+			// Set the SAVEDATA_PARAMS byte to 0x21.
+            savedataParams[0] |= 0x00;
+        }
+
+		if ((check_bit & 0x1) == 0x1) {
             // Generate a type 1 hash.
             GenerateSavedataHash(data, size, 1, key, hash_0x10);
-        }
-        
+            // Set the SAVEDATA_PARAMS bit to 0x01.
+            savedataParams[0] |= 0x01;
+		}
+
         // Store the hashes at the right offsets.
         arraycopy(hash_0x20, 0, savedataParams, 0x20, 0x10);
         arraycopy(hash_0x70, 0, savedataParams, 0x70, 0x10);
@@ -730,7 +728,7 @@ unsigned short read16(const void *p){
 int main(int argc, char **argv){
 	kirk_init();
 	initstdio();
-	if(argc<2){
+	if(argc<3){
 		fprintf(stderr,
 			"[Proof of Concept/beta] PSP Savedata En/Decrypter on PC (GPLv3+)\n"
 			"kirk-engine (C) draan / proxima\n"
