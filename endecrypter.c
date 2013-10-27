@@ -158,7 +158,7 @@ int i;
                 }
                 ScrambleSD(header, 0x10, 0xE, 0x4, 0x04);
                 for (i = 0; i < 0x10; i++) {
-                    header[0xC + i] = (byte) (0xC + header[i] ^ sdHashKey4[i]);
+                    header[0xC + i] = (byte) (header[0xC + i] ^ sdHashKey4[i]);
                 }
                 arraycopy(header, 0xC, ctx->buf, 0, 0x10);
                 arraycopy(header, 0xC, data, 0, 0x10);
@@ -413,6 +413,10 @@ int i;
         if ((ctx->mode == 0x2) || (ctx->mode == 0x4) || (ctx->mode == 0x6)) {
             arraycopy(resultBuf, 0, scrambleResultBuf, 0x14, 0x10);
             ScrambleSD(scrambleResultBuf, 0x10, 0x100, 0x4, 0x05);
+            arraycopy(scrambleResultBuf, 0, scrambleResultBuf, 0x14, 0x10);
+            for(int i = 0; i < 0x14; i++) {
+                scrambleResultBuf[i] = 0;
+            }
             ScrambleSD(scrambleResultBuf, 0x10, seed, 0x4, 0x04);
             arraycopy(scrambleResultBuf, 0, resultBuf, 0, 0x10);
         }
@@ -771,19 +775,23 @@ int main(int argc, char **argv){
 					for(;j<nlabel;j++){
 						if(!strcmp(p+label_offset+read16(p+20+16*j),"SAVEDATA_FILE_LIST")){
 							int paramsize=read32(p+20+16*i+8);
-							//fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,stdout);
+#ifdef HASHTEST
+							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,stdout);
+							UpdateSavedataHashes(p+data_offset+read32(p+20+16*i+12),inbuf,size);
+							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,stdout);
+#else
 							EncryptSavedata(inbuf, size, key, p+data_offset+read32(p+20+16*j+12)+0x0d);
 							fwrite(inbuf,1,size+0x10,stdout);
 							UpdateSavedataHashes(p+data_offset+read32(p+20+16*i+12),inbuf,size+0x10);
 							//DecryptSavedata(inbuf, size+0x10, key);
 							//fwrite(inbuf,1,size,stdout);
-							//fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,stdout);
 
 							//write back
 							fseek(f,data_offset+read32(p+20+16*i+12),SEEK_SET);
 							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,f);
 							fseek(f,data_offset+read32(p+20+16*j+12)+0x0d,SEEK_SET);
 							fwrite(p+data_offset+read32(p+20+16*j+12)+0x0d,1,0x10,f);
+#endif
 							break;
 						}
 					}
