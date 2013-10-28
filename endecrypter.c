@@ -775,9 +775,14 @@ int main(int argc, char **argv){
 					for(;j<nlabel;j++){
 						if(!strcmp(p+label_offset+read16(p+20+16*j),"SAVEDATA_FILE_LIST")){
 							int paramsize=read32(p+20+16*i+8);
+							char param[paramsize];
 #ifdef HASHTEST
-							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,stdout);
-							UpdateSavedataHashes(p+data_offset+read32(p+20+16*i+12),inbuf,size);
+							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,stdout); ///
+							memcpy(param,p+data_offset+read32(p+20+16*i+12),paramsize);
+							memset(p+data_offset+read32(p+20+16*i+12),0,paramsize);
+							//UpdateSavedataHashes(p+data_offset+read32(p+20+16*i+12),inbuf,size);
+							UpdateSavedataHashes(param,p,sfosize);
+							memcpy(p+data_offset+read32(p+20+16*i+12),param,paramsize); /// these two outputs should be the same
 							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,stdout);
 #else
 							EncryptSavedata(inbuf, size, key, p+data_offset+read32(p+20+16*j+12)+0x0d);
