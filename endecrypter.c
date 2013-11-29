@@ -38,16 +38,30 @@ typedef struct{
 		byte buf[16];
 } _SD_Ctx2, *SD_Ctx2;
 
-bool isNullKey(byte *key) {
+bool isNullKey(byte* key) {
 	if (key != NULL) {
 		int i=0;
 		for (; i < 0x10; i++) {
-			if (key[i]) {
+			if (key[i] != (byte) 0) {
 				return false;
 			}
 		}
 	}
 	return true;
+}
+    
+void xorHash(byte* dest, int dest_offset, int* src, int src_offset, int size) {
+	int i=0;
+	for (int i = 0; i < size; i++) {
+		dest[dest_offset + i] = (byte) (dest[dest_offset + i] ^ src[src_offset + i]);
+	}
+}
+    
+void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
+	int i=0;
+	for (int i = 0; i < size; i++) {
+		dest[dest_offset + i] = (byte) (dest[dest_offset + i] ^ src[src_offset + i]);
+	}
 }
 
     void ScrambleSD(byte *buf, int size, int seed, int cbc, int kirk_code) {
@@ -91,7 +105,114 @@ bool isNullKey(byte *key) {
 
         sceUtilsBufferCopyWithRange(buf, size, buf, size, kirk_code);
     }
-    
+
+    int getModeSeed(int mode) {
+        int seed;
+        switch (mode) {
+            case 0x6:
+                seed = 0x11;
+                break;
+            case 0x4:
+                seed = 0xD;
+                break;
+            case 0x2:
+                seed = 0x5;
+                break;
+            case 0x1:
+                seed = 0x3;
+                break;
+            case 0x3:
+                seed = 0xC;
+                break;
+            default:
+                seed = 0x10;
+                break;
+        }
+        return seed;
+    }
+
+    void cryptMember(SD_Ctx2 ctx, byte* data, int data_offset, int length) {
+        int finalSeed;
+        byte dataBuf[length + 0x14];memset(dataBuf,0,sizeof(dataBuf));
+        byte keyBuf[0x10 + 0x10];memset(keyBuf,0,sizeof(keyBuf));
+        byte hashBuf[0x10];memset(hashBuf,0,sizeof(hashBuf));
+
+        // Copy the hash stored by hleSdCreateList.
+        arraycopy(ctx->buf, 0, dataBuf, 0x14, 0x10);
+
+        if (ctx->mode == 0x1) {
+            // Decryption mode 0x01: decrypt the hash directly with KIRK CMD7.
+            ScrambleSD(dataBuf, 0x10, 0x4, 5, 0x07);
+            finalSeed = 0x53;
+        } else if (ctx->mode == 0x2) {
+            // Decryption mode 0x02: decrypt the hash directly with KIRK CMD8.
+            ScrambleSD(dataBuf, 0x10, 0x100, 5, 0x08);
+            finalSeed = 0x53;
+        } else if (ctx->mode == 0x3) {
+            // Decryption mode 0x03: XOR the hash with SD keys and decrypt with KIRK CMD7.
+            xorHash(dataBuf, 0x14, sdHashKey4, 0, 0x10);
+            ScrambleSD(dataBuf, 0x10, 0xE, 5, 0x07);
+            xorHash(dataBuf, 0, sdHashKey3, 0, 0x10);
+            finalSeed = 0x57;
+        } else if (ctx->mode == 0x4) {
+            // Decryption mode 0x04: XOR the hash with SD keys and decrypt with KIRK CMD8.
+            xorHash(dataBuf, 0x14, sdHashKey4, 0, 0x10);
+            ScrambleSD(dataBuf, 0x10, 0x100, 5, 0x08);
+            xorHash(dataBuf, 0, sdHashKey3, 0, 0x10);
+            finalSeed = 0x57;
+        } else if (ctx->mode == 0x6) {
+            // Decryption mode 0x06: XOR the hash with new SD keys and decrypt with KIRK CMD8.
+            xorHash(dataBuf, 0x14, sdHashKey7, 0, 0x10);
+            ScrambleSD(dataBuf, 0x10, 0x100, 5, 0x08);
+            xorHash(dataBuf, 0, sdHashKey6, 0, 0x10);
+            finalSeed = 0x64;
+        } else {
+            // Decryption mode 0x05: XOR the hash with new SD keys and decrypt with KIRK CMD7.
+            xorHash(dataBuf, 0x14, sdHashKey7, 0, 0x10);
+            ScrambleSD(dataBuf, 0x10, 0x12, 5, 0x07);
+            xorHash(dataBuf, 0, sdHashKey6, 0, 0x10);
+            finalSeed = 0x64;
+        }
+
+        // Store the calculated key.
+		arraycopy(dataBuf, 0, keyBuf, 0x10, 0x10);
+
+        // Apply extra padding if ctx.unk is not 1.
+        if (ctx->unk != 0x1) {
+            arraycopy(keyBuf, 0x10, keyBuf, 0, 0xC);
+            keyBuf[0xC] = (byte) ((ctx->unk - 1) & 0xFF);
+            keyBuf[0xD] = (byte) (((ctx->unk - 1) >> 8) & 0xFF);
+            keyBuf[0xE] = (byte) (((ctx->unk - 1) >> 16) & 0xFF);
+            keyBuf[0xF] = (byte) (((ctx->unk - 1) >> 24) & 0xFF);
+        }
+
+        // Copy the first 0xC bytes of the obtained key and replicate them
+        // across a new list buffer. As a terminator, add the ctx1.seed parameter's
+        // 4 bytes (endian swapped) to achieve a full numbered list.
+        for (int i = 0x14; i < (length + 0x14); i += 0x10) {
+            arraycopy(keyBuf, 0x10, dataBuf, i, 0xC);
+            dataBuf[i + 0xC] = (byte) (ctx->unk & 0xFF);
+            dataBuf[i + 0xD] = (byte) ((ctx->unk >> 8) & 0xFF);
+            dataBuf[i + 0xE] = (byte) ((ctx->unk >> 16) & 0xFF);
+            dataBuf[i + 0xF] = (byte) ((ctx->unk >> 24) & 0xFF);
+            ctx->unk++;
+        }
+
+        arraycopy(dataBuf, length + 0x04, hashBuf, 0, 0x10);
+
+        ScrambleSD(dataBuf, length, finalSeed, 5, 0x07);
+
+        // XOR the first 16-bytes of data with the saved key to generate a new hash.
+        xorKey(dataBuf, 0, keyBuf, 0, 0x10);
+
+        // Copy back the last hash from the list to the first half of keyBuf.
+        arraycopy(hashBuf, 0, keyBuf, 0, 0x10);
+
+        // Finally, XOR the full list with the given data.
+        xorKey(data, data_offset, dataBuf, 0, length);
+    }
+
+
     /*
      * sceSd - chnnlsv.prx
      */
@@ -101,123 +222,90 @@ bool isNullKey(byte *key) {
         return 0;
     }
 
-    int hleSdCreateList(SD_Ctx2 ctx, int encMode, int genMode, byte *data, byte *key) {
+    int hleSdCreateList(SD_Ctx2 ctx, int encMode, int genMode, byte* data, byte* key) {
         // If the key is not a 16-byte key, return an error.
         //if (key.length < 0x10) {
         //    return -1;
         //}
-int i;
+
         // Set the mode and the unknown parameters.
         ctx->mode = encMode;
         ctx->unk = 0x1;
 
         // Key generator mode 0x1 (encryption): use an encrypted pseudo random number before XORing the data with the given key.
         if (genMode == 0x1) {
-            byte header[0x14 + 0x2C];memset(header,0,sizeof(header));
-            byte seed[0x14];memset(seed,0,sizeof(seed));
-            byte tmp[0x2C];memset(tmp,0,sizeof(tmp));
+            byte header[0x25];
+            byte seed[0x14];
 
+            // Generate SHA-1 to act as seed for encryption.
+            //ByteBuffer bSeed = ByteBuffer.wrap(seed);
             sceUtilsBufferCopyWithRange(seed, 0x14, NULL, 0, 0xE);
-            
-            arraycopy(seed, 0, tmp, 0x8, 0x14);
-
-            for (i = 0xF; i >= 0; i--) {
-                tmp[0x14 - i] = tmp[0x8 + i];
-            }
-            for (i = 0; i < 4; i++) {
-                tmp[0x20 + 0x8 + i] = 0;
-            }
-            arraycopy(tmp, 0, header, 0x14, 0x2C);
+                       
+            // Propagate SHA-1 in kirk header.
+            arraycopy(seed, 0, header, 0, 0x10);
+            arraycopy(seed, 0, header, 0x14, 0x10);
 
             // Encryption mode 0x1: encrypt with KIRK CMD4 and XOR with the given key.
             if (ctx->mode == 0x1) {
                 ScrambleSD(header, 0x10, 0x4, 0x4, 0x04);
-                arraycopy(header, 0xC, ctx->buf, 0, 0x10);
-                arraycopy(header, 0xC, data, 0, 0x10);
+                arraycopy(header, 0, ctx->buf, 0, 0x10);
+                arraycopy(header, 0, data, 0, 0x10);
                 // If the key is not null, XOR the hash with it.
                 if (!isNullKey(key)) {
-                    for (i = 0; i < 16; i++) {
-                        ctx->buf[i] = (byte) (ctx->buf[i] ^ key[i]);
-                    }
+                    xorKey(ctx->buf, 0, key, 0, 0x10);
                 }
                 return 0;
             } else if (ctx->mode == 0x2) { // Encryption mode 0x2: encrypt with KIRK CMD5 and XOR with the given key.
                 ScrambleSD(header, 0x10, 0x100, 0x4, 0x05);
-                arraycopy(header, 0xC, ctx->buf, 0, 0x10);
-                arraycopy(header, 0xC, data, 0, 0x10);
+                arraycopy(header, 0, ctx->buf, 0, 0x10);
+                arraycopy(header, 0, data, 0, 0x10);
                 // If the key is not null, XOR the hash with it.
                 if (!isNullKey(key)) {
-                    for (i = 0; i < 16; i++) {
-                        ctx->buf[i] = (byte) (ctx->buf[i] ^ key[i]);
-                    }
+                    xorKey(ctx->buf, 0, key, 0, 0x10);
                 }
                 return 0;
             } else if (ctx->mode == 0x3) { // Encryption mode 0x3: XOR with SD keys, encrypt with KIRK CMD4 and XOR with the given key.
-                for (i = 0; i < 0x10; i++) {
-                    header[0x14 + 0xC + i] = (byte) (header[0x14 + 0xC + i] ^ sdHashKey3[i]);
-                }
+                xorHash(header, 0x14, sdHashKey3, 0, 0x10);
                 ScrambleSD(header, 0x10, 0xE, 0x4, 0x04);
-                for (i = 0; i < 0x10; i++) {
-                    header[0xC + i] = (byte) (header[0xC + i] ^ sdHashKey4[i]);
-                }
-                arraycopy(header, 0xC, ctx->buf, 0, 0x10);
-                arraycopy(header, 0xC, data, 0, 0x10);
+                xorHash(header, 0, sdHashKey4, 0, 0x10);
+                arraycopy(header, 0, ctx->buf, 0, 0x10);
+                arraycopy(header, 0, data, 0, 0x10);
                 // If the key is not null, XOR the hash with it.
                 if (!isNullKey(key)) {
-                    for (i = 0; i < 16; i++) {
-                        ctx->buf[i] = (byte) (ctx->buf[i] ^ key[i]);
-                    }
+                    xorKey(ctx->buf, 0, key, 0, 0x10);
                 }
                 return 0;
             } else if (ctx->mode == 0x4) { // Encryption mode 0x4: XOR with SD keys, encrypt with KIRK CMD5 and XOR with the given key.
-                for (i = 0; i < 0x10; i++) {
-                    header[0x14 + 0xC + i] = (byte) (header[0x14 + 0xC + i] ^ sdHashKey3[i]);
-                }
+                xorHash(header, 0x14, sdHashKey3, 0, 0x10);
                 ScrambleSD(header, 0x10, 0x100, 0x4, 0x05);
-                for (i = 0; i < 0x10; i++) {
-                    header[0xC + i] = (byte) (header[0xC + i] ^ sdHashKey4[i]);
-                }
-                arraycopy(header, 0xC, ctx->buf, 0, 0x10);
-                arraycopy(header, 0xC, data, 0, 0x10);
+                xorHash(header, 0, sdHashKey4, 0, 0x10);
+                arraycopy(header, 0, ctx->buf, 0, 0x10);
+                arraycopy(header, 0, data, 0, 0x10);
                 // If the key is not null, XOR the hash with it.
                 if (!isNullKey(key)) {
-                    for (i = 0; i < 16; i++) {
-                        ctx->buf[i] = (byte) (ctx->buf[i] ^ key[i]);
-                    }
+                    xorKey(ctx->buf, 0, key, 0, 0x10);
                 }
                 return 0;
             } else if (ctx->mode == 0x6) { // Encryption mode 0x6: XOR with new SD keys, encrypt with KIRK CMD5 and XOR with the given key.
-                for (i = 0; i < 0x10; i++) {
-                    header[0x14 + 0xC + i] = (byte) (header[0x14 + 0xC + i] ^ sdHashKey6[i]);
-                }
+                xorHash(header, 0x14, sdHashKey6, 0, 0x10);
                 ScrambleSD(header, 0x10, 0x100, 0x4, 0x05);
-                for (i = 0; i < 0x10; i++) {
-                    header[0xC + i] = (byte) (header[0xC + i] ^ sdHashKey7[i]);
-                }
-                arraycopy(header, 0xC, ctx->buf, 0, 0x10);
-                arraycopy(header, 0xC, data, 0, 0x10);
+                xorHash(header, 0, sdHashKey7, 0, 0x10);
+                arraycopy(header, 0, ctx->buf, 0, 0x10);
+                arraycopy(header, 0, data, 0, 0x10);
                 // If the key is not null, XOR the hash with it.
                 if (!isNullKey(key)) {
-                    for (i = 0; i < 16; i++) {
-                        ctx->buf[i] = (byte) (ctx->buf[i] ^ key[i]);
-                    }
+                    xorKey(ctx->buf, 0, key, 0, 0x10);
                 }
                 return 0;
-            } else { // Encryption mode 0x0: XOR with new SD keys, encrypt with KIRK CMD4 and XOR with the given key.
-                for (i = 0; i < 0x10; i++) {
-                    header[0x14 + 0xC + i] = (byte) (header[0x14 + 0xC + i] ^ sdHashKey6[i]);
-                }
+            } else { // Encryption mode 0x5: XOR with new SD keys, encrypt with KIRK CMD4 and XOR with the given key.
+                xorHash(header, 0x14, sdHashKey6, 0, 0x10);
                 ScrambleSD(header, 0x10, 0x12, 0x4, 0x04);
-                for (i = 0; i < 0x10; i++) {
-                    header[0xC + i] = (byte) (header[0xC + i] ^ sdHashKey7[i]);
-                }
-                arraycopy(header, 0xC, ctx->buf, 0, 0x10);
-                arraycopy(header, 0xC, data, 0, 0x10);
+                xorHash(header, 0, sdHashKey7, 0, 0x10);
+                arraycopy(header, 0, ctx->buf, 0, 0x10);
+                arraycopy(header, 0, data, 0, 0x10);
                 // If the key is not null, XOR the hash with it.
                 if (!isNullKey(key)) {
-                    for (i = 0; i < 16; i++) {
-                        ctx->buf[i] = (byte) (ctx->buf[i] ^ key[i]);
-                    }
+                    xorKey(ctx->buf, 0, key, 0, 0x10);
                 }
                 return 0;
             }
@@ -226,9 +314,7 @@ int i;
             arraycopy(data, 0, ctx->buf, 0, 0x10);
             // If the key is not null, XOR the hash with it.
             if (!isNullKey(key)) {
-                for (i = 0; i < 16; i++) {
-                    ctx->buf[i] = (byte) (ctx->buf[i] ^ key[i]);
-                }
+                xorKey(ctx->buf, 0, key, 0, 0x10);
             }
             return 0;
         } else {
@@ -250,27 +336,7 @@ int i;
             return 0;
         } else {
             // Calculate the seed.
-            int seed = 0;
-            switch (ctx->mode) {
-                case 0x6:
-                    seed = 0x11;
-                    break;
-                case 0x4:
-                    seed = 0xD;
-                    break;
-                case 0x2:
-                    seed = 0x5;
-                    break;
-                case 0x1:
-                    seed = 0x3;
-                    break;
-                case 0x3:
-                    seed = 0xC;
-                    break;
-                default:
-                    seed = 0x10;
-                    break;
-            }
+            int seed = getModeSeed(ctx->mode);
 
             // Setup the buffers. 
             byte scrambleBuf[(length + ctx->padSize) + 0x14];
@@ -298,14 +364,12 @@ int i;
             int dataOffset = 0;
 
             while (length > 0) {
-                blockSize = (length + kLen >= 0x0800) ? 0x0800 : length + kLen;
+                blockSize = (length + kLen >= 0x800) ? 0x800 : length + kLen;
 
                 arraycopy(data, dataOffset, scrambleBuf, 0x14 + kLen, blockSize - kLen);
 
                 // Encrypt with KIRK CMD 4 and XOR with result.
-                for (i = 0; i < 0x10; i++) {
-                    scrambleBuf[0x14 + i] = (byte) (scrambleBuf[0x14 + i] ^ ctx->key[i]);
-                }
+                xorKey(scrambleBuf, 0x14, ctx->key, 0, 0x10);
                 ScrambleSD(scrambleBuf, blockSize, seed, 0x4, 0x04);
                 arraycopy(scrambleBuf, (blockSize + 0x4) - 0x14, ctx->key, 0, 0x10);
 
@@ -335,27 +399,7 @@ int i;
         byte scrambleResultKeyBuf[0x10 + 0x14];memset(scrambleResultKeyBuf,0,sizeof(scrambleResultKeyBuf));
 
         // Calculate the seed.
-        int seed = 0;
-        switch (ctx->mode) {
-            case 0x6:
-                seed = 0x11;
-                break;
-            case 0x4:
-                seed = 0xD;
-                break;
-            case 0x2:
-                seed = 0x5;
-                break;
-            case 0x1:
-                seed = 0x3;
-                break;
-            case 0x3:
-                seed = 0xC;
-                break;
-            default:
-                seed = 0x10;
-                break;
-        }
+        int seed = getModeSeed(ctx->mode);
 
         // Encrypt an empty buffer with KIRK CMD 4.
         ScrambleSD(scrambleEmptyBuf, 0x10, seed, 0x4, 0x04);
@@ -384,29 +428,21 @@ int i;
         }
 
         // XOR previous key with new one.
-        for (i = 0; i < 0x10; i++) {
-            ctx->pad[i] = (byte) (ctx->pad[i] ^ keyBuf[i]);
-        }
+        xorKey(ctx->pad, 0, keyBuf, 0, 0x10);
 
         arraycopy(ctx->pad, 0, scrambleKeyBuf, 0x14, 0x10);
         arraycopy(ctx->key, 0, resultBuf, 0, 0x10);
 
         // Encrypt with KIRK CMD 4 and XOR with result.
-        for (i = 0; i < 0x10; i++) {
-            scrambleKeyBuf[0x14 + i] = (byte) (scrambleKeyBuf[0x14 + i] ^ resultBuf[i]);
-        }
+        xorKey(scrambleKeyBuf, 0x14, resultBuf, 0, 0x10);
         ScrambleSD(scrambleKeyBuf, 0x10, seed, 0x4, 0x04);
         arraycopy(scrambleKeyBuf, (0x10 + 0x4) - 0x14, resultBuf, 0, 0x10);
 
-        // If ctx1.mode is the new mode 0x6, XOR with the new hash key 5, else, XOR with hash key 2.
-        if (ctx->mode == 0x6) {
-            for (i = 0; i < 0x10; i++) {
-                resultBuf[i] = (byte) (resultBuf[i] ^ sdHashKey5[i]);
-            }
-        } else {
-            for (i = 0; i < 0x10; i++) {
-                resultBuf[i] = (byte) (resultBuf[i] ^ sdHashKey2[i]);
-            }
+        // If ctx.mode is new mode 0x5 or 0x6, XOR with the new hash key 5, else, XOR with hash key 2.
+        if ((ctx->mode == 0x5) || (ctx->mode == 0x6)) {
+            xorHash(resultBuf, 0, sdHashKey5, 0, 0x10);
+        } else if ((ctx->mode == 0x3) || (ctx->mode == 0x4)) {
+            xorHash(resultBuf, 0, sdHashKey2, 0, 0x10);
         }
 
         // If mode is 2, 4 or 6, encrypt again with KIRK CMD 5 and then KIRK CMD 4.
@@ -423,9 +459,7 @@ int i;
 
         // XOR with the supplied key and encrypt with KIRK CMD 4.
         if (key != NULL) {
-            for (i = 0; i < 0x10; i++) {
-                resultBuf[i] = (byte) (resultBuf[i] ^ key[i]);
-            }
+            xorKey(resultBuf, 0, key, 0, 0x10);
             arraycopy(resultBuf, 0, scrambleResultKeyBuf, 0x14, 0x10);
             ScrambleSD(scrambleResultKeyBuf, 0x10, seed, 0x4, 0x04);
             arraycopy(scrambleResultKeyBuf, 0, resultBuf, 0, 0x10);
@@ -440,113 +474,25 @@ int i;
         return 0;
     }
 
-    int hleSdSetMember(SD_Ctx2 ctx, byte *data, int length) {
-	int i;
+    int hleSdSetMember(SD_Ctx2 ctx, byte* data, int length) {
         if (length <= 0) {
             return -1;
         }
 
-        int finalSeed = 0;
-        byte dataBuf[length + 0x14];memset(dataBuf,0,sizeof(dataBuf));
-        byte keyBuf[0x10 + 0x10];memset(keyBuf,0,sizeof(keyBuf));
-        byte hashBuf[0x10];memset(hashBuf,0,sizeof(hashBuf));
-
-        // Copy the hash stored by hleSdCreateList.
-        arraycopy(ctx->buf, 0, dataBuf, 0x14, 0x10);
-
-        if (ctx->mode == 0x1) {
-            // Decryption mode 0x01: decrypt the hash directly with KIRK CMD7.
-            ScrambleSD(dataBuf, 0x10, 0x4, 5, 0x07);
-            finalSeed = 0x53;
-        } else if (ctx->mode == 0x2) {
-            // Decryption mode 0x02: decrypt the hash directly with KIRK CMD8.
-            ScrambleSD(dataBuf, 0x10, 0x100, 5, 0x08);
-            finalSeed = 0x53;
-        } else if (ctx->mode == 0x3) {
-            // Decryption mode 0x03: XOR the hash with SD keys and decrypt with KIRK CMD7.
-            for (i = 0; i < 0x10; i++) {
-                dataBuf[0x14 + i] = (byte) (dataBuf[0x14 + i] ^ sdHashKey4[i]);
+        // Parse the data in 0x800 blocks first.
+        int index = 0;
+        if (length >= 0x800) {
+            for (index = 0; length >= 0x800; index += 0x800) {
+                cryptMember(ctx, data, index, 0x800);
+                length -= 0x800;
             }
-            ScrambleSD(dataBuf, 0x10, 0xE, 5, 0x07);
-            for (i = 0; i < 0x10; i++) {
-                dataBuf[i] = (byte) (dataBuf[i] ^ sdHashKey3[i]);
-            }
-            finalSeed = 0x57;
-        } else if (ctx->mode == 0x4) {
-            // Decryption mode 0x04: XOR the hash with SD keys and decrypt with KIRK CMD8.
-            for (i = 0; i < 0x10; i++) {
-                dataBuf[0x14 + i] = (byte) (dataBuf[0x14 + i] ^ sdHashKey4[i]);
-            }
-            ScrambleSD(dataBuf, 0x10, 0x100, 5, 0x08);
-            for (i = 0; i < 0x10; i++) {
-                dataBuf[i] = (byte) (dataBuf[i] ^ sdHashKey3[i]);
-            }
-            finalSeed = 0x57;
-        } else if (ctx->mode == 0x6) {
-            // Decryption mode 0x06: XOR the hash with new SD keys and decrypt with KIRK CMD8.
-            for (i = 0; i < 0x10; i++) {
-                dataBuf[0x14 + i] = (byte) (dataBuf[0x14 + i] ^ sdHashKey7[i]);
-            }
-            ScrambleSD(dataBuf, 0x10, 0x100, 5, 0x08);
-            for (i = 0; i < 0x10; i++) {
-                dataBuf[i] = (byte) (dataBuf[i] ^ sdHashKey6[i]);
-            }
-            finalSeed = 0x64;
-        } else {
-            // Decryption master mode: XOR the hash with new SD keys and decrypt with KIRK CMD7.
-            for (i = 0; i < 0x10; i++) {
-                dataBuf[0x14 + i] = (byte) (dataBuf[0x14 + i] ^ sdHashKey7[i]);
-            }
-            ScrambleSD(dataBuf, 0x10, 0x12, 5, 0x07);
-            for (i = 0; i < 0x10; i++) {
-                dataBuf[i] = (byte) (dataBuf[i] ^ sdHashKey6[i]);
-            }
-            finalSeed = 0x64;
         }
 
-        // Store the calculated key.
-        arraycopy(dataBuf, 0, keyBuf, 0x10, 0x10);
-
-        if (ctx->unk != 0x1) {
-            arraycopy(keyBuf, 0x10, keyBuf, 0, 0xC);
-            keyBuf[0xC] = (byte) ((ctx->unk - 1) & 0xFF);
-            keyBuf[0xD] = (byte) (((ctx->unk - 1) >> 8) & 0xFF);
-            keyBuf[0xE] = (byte) (((ctx->unk - 1) >> 16) & 0xFF);
-            keyBuf[0xF] = (byte) (((ctx->unk - 1) >> 24) & 0xFF);
-        }
-
-        // Copy the first 0xC bytes of the obtained key and replicate them
-        // across a new list buffer. As a terminator, add the ctx1.seed parameter's
-        // 4 bytes (endian swapped) to achieve a full numbered list.
-        for (i = 0x14; i < (length + 0x14); i += 0x10) {
-            arraycopy(keyBuf, 0x10, dataBuf, i, 0xC);
-            dataBuf[i + 0xC] = (byte) (ctx->unk & 0xFF);
-            dataBuf[i + 0xD] = (byte) ((ctx->unk >> 8) & 0xFF);
-            dataBuf[i + 0xE] = (byte) ((ctx->unk >> 16) & 0xFF);
-            dataBuf[i + 0xF] = (byte) ((ctx->unk >> 24) & 0xFF);
-            ctx->unk++;
-        }
-
-        arraycopy(dataBuf, length + 0x04, hashBuf, 0, 0x10);
-
-        ScrambleSD(dataBuf, length, finalSeed, 5, 0x07);
-
-        // XOR the first 16-bytes of data with the saved key to generate a new hash.
-        for (i = 0; i < 0x10; i++) {
-            dataBuf[i] = (byte) (dataBuf[i] ^ keyBuf[i]);
-        }
-
-        // Copy back the last hash from the list to the first half of keyBuf.
-        arraycopy(hashBuf, 0, keyBuf, 0, 0x10);
-
-        // Finally, XOR the full list with the given data.
-        for (i = 0; i < length; i++) {
-            data[i] = (byte) (data[i] ^ dataBuf[i]);
-        }
+        // Finally parse the rest of the data.
+        cryptMember(ctx, data, index, length);
 
         return 0;
     }
-
 
     void DecryptSavedata(byte *buf, int size, byte *key) {
         // Initialize the context structs.
@@ -588,7 +534,7 @@ int i;
         //hleSdGetLastIndex(&ctx1, hash, key);
         
         // Copy back the data.
-        arraycopy(tmpbuf, 0, buf, 0, alignedSize - 0x10);
+        arraycopy(tmpbuf, 0, buf, 0, size - 0x10);
 
         //return hash;
     }
