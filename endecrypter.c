@@ -601,7 +601,7 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
         // Generate a new hash using a key.
         hleSdSetIndex(&ctx1, mode);
         hleSdRemoveValue(&ctx1, data, size);
-        hleSdGetLastIndex(&ctx1, hash, key);
+        if(hleSdGetLastIndex(&ctx1, hash, NULL)<0)memset(hash,1,0x10);
         
         //return hash;
     }
@@ -609,10 +609,8 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
     void UpdateSavedataHashes(byte* savedataParams, byte* data, int size) {
         // Setup the params, hashes, modes and key (empty).
         byte key[0x10];memset(key,0,sizeof(key));
-        byte hash_0x70[0x10];memset(hash_0x70,0,sizeof(hash_0x70));
-        byte hash_0x20[0x10];memset(hash_0x20,0,sizeof(hash_0x20));
-        byte hash_0x10[0x10];memset(hash_0x10,0,sizeof(hash_0x10));
-        int mode = 4;
+
+        int mode = 2;
         int check_bit = 1;
 
         // Check for previous SAVEDATA_PARAMS data in the file.
@@ -623,46 +621,38 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
             mode = ((savedataParams[0] >> 4) & 0xF);
             check_bit = ((savedataParams[0]) & 0xF);
         //}
+		memset(savedataParams,0,0x80);
+		if((mode&0x4)==0x4)mode=2;
 
         if ((mode & 0x4) == 0x4) {
             // Generate a type 6 hash.
-            GenerateSavedataHash(data, size, 6, key, hash_0x20);
+            GenerateSavedataHash(data, size, 6, key, savedataParams+0x20);
 			// Generate a type 5 hash.
-			GenerateSavedataHash(data, size, 5, key, hash_0x70);
+			GenerateSavedataHash(data, size, 5, key, savedataParams+0x70);
 			// Set the SAVEDATA_PARAMS byte to 0x41.
-            savedataParams[0] |= 0x40;
+            //savedataParams[0] |= 0x40;
 		} else if((mode & 0x2) == 0x2) {
 			// Generate a type 4 hash.
-            GenerateSavedataHash(data, size, 4, key, hash_0x20);
-            // Generate a type 3 hash.
-            GenerateSavedataHash(data, size, 3, key, hash_0x70);
-			// Set the SAVEDATA_PARAMS byte to 0x21.
+            GenerateSavedataHash(data, size, 4, key, savedataParams+0x20);
+			savedataParams[0]|=0x01;
+
             savedataParams[0] |= 0x20;
+            // Generate a type 3 hash.
+            GenerateSavedataHash(data, size, 3, key, savedataParams+0x70);
+			// Set the SAVEDATA_PARAMS byte to 0x21.
+			//fwrite(savedataParams,1,0x80,stdout);
+
         } else {
             // Generate a type 2 hash.
-            GenerateSavedataHash(data, size, 2, key, hash_0x20);
+            GenerateSavedataHash(data, size, 2, key, savedataParams+0x20);
 			// Set the SAVEDATA_PARAMS byte to 0x21.
-            savedataParams[0] |= 0x00;
+            //savedataParams[0] |= 0x00;
         }
 
 		if ((check_bit & 0x1) == 0x1) {
             // Generate a type 1 hash.
-            GenerateSavedataHash(data, size, 1, key, hash_0x10);
-            // Set the SAVEDATA_PARAMS bit to 0x01.
-            savedataParams[0] |= 0x01;
+            GenerateSavedataHash(data, size, 1, key, savedataParams+0x10);
 		}
-
-        // Store the hashes at the right offsets.
-        arraycopy(hash_0x20, 0, savedataParams, 0x20, 0x10);
-        arraycopy(hash_0x70, 0, savedataParams, 0x70, 0x10);
-        arraycopy(hash_0x10, 0, savedataParams, 0x10, 0x10);
-
-        // Output the final PSF file containing the SAVEDATA param and file hashes.
-        //try {
-        //    psf.put("SAVEDATA_PARAMS", savedataParams);
-        //} catch (Exception e) {
-            // Ignore...
-        //}
     }
 
 unsigned int read32(const void *p){
@@ -721,19 +711,18 @@ int main(int argc, char **argv){
 					for(;j<nlabel;j++){
 						if(!strcmp(p+label_offset+read16(p+20+16*j),"SAVEDATA_FILE_LIST")){
 							int paramsize=read32(p+20+16*i+8);
-							char param[paramsize];
+							u8 *param=p+data_offset+read32(p+20+16*i+12);
 #ifdef HASHTEST
-							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,stdout); ///
-							memcpy(param,p+data_offset+read32(p+20+16*i+12),paramsize);
-							memset(p+data_offset+read32(p+20+16*i+12),0,paramsize);
-							//UpdateSavedataHashes(p+data_offset+read32(p+20+16*i+12),inbuf,size);
+							fwrite(param,1,paramsize,stdout); ///
 							UpdateSavedataHashes(param,p,sfosize);
-							memcpy(p+data_offset+read32(p+20+16*i+12),param,paramsize); /// these two outputs should be the same
-							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,stdout);
+							fwrite(param,1,paramsize,stdout);
+
+							fseek(f,data_offset+read32(p+20+16*i+12),SEEK_SET);
+							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,f);
 #else
 							EncryptSavedata(inbuf, size, key, p+data_offset+read32(p+20+16*j+12)+0x0d);
 							fwrite(inbuf,1,size+0x10,stdout);
-							UpdateSavedataHashes(p+data_offset+read32(p+20+16*i+12),inbuf,size+0x10);
+							UpdateSavedataHashes(param,p,sfosize);
 							//DecryptSavedata(inbuf, size+0x10, key);
 							//fwrite(inbuf,1,size,stdout);
 

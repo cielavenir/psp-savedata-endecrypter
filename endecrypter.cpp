@@ -169,7 +169,6 @@ int sub_0000(u8* data_out, u8* data, int alignedLen, u8* data2, int& data3, int 
 	case 1:	case 3:	default:res = kirkSendCmd(data_out, 16, numFromMode2(mode), false);
 	break;
 	}
-
 	if (type == 87)
 		memxor(data_out, key199C, 16);
 	else if (type == 100)
@@ -384,6 +383,7 @@ int sceSdRemoveValue_(pspChnnlsvContext1& ctx, u8* data, int length)
 
 int sceSdCreateList_(pspChnnlsvContext2& ctx2, int mode, int uknw, u8* data, u8* cryptkey)
 {
+fprintf(stderr,"%08lx e\n",data);
 	ctx2.mode = mode;
 	ctx2.unkn = 1;
 	if (uknw == 2)
@@ -396,12 +396,13 @@ int sceSdCreateList_(pspChnnlsvContext2& ctx2, int mode, int uknw, u8* data, u8*
 	}
 	else if (uknw == 1)
 	{
+fprintf(stderr,"%08lx e\n",data);
 		u8 kirkHeader[37];
 		u8* kirkData = kirkHeader+20;
 		int res = sub_17A8(kirkHeader);
 		if (res)
 			return res;
-
+fprintf(stderr,"a\n");
 		memcpy(kirkHeader+20, kirkHeader, 16);
 		memset(kirkHeader+32, 0, 4);
 
@@ -410,7 +411,8 @@ int sceSdCreateList_(pspChnnlsvContext2& ctx2, int mode, int uknw, u8* data, u8*
 			memxor(kirkData, key199C, 16);
 		else if (type == 100)
 			memxor(kirkData, key19CC, 16);
-
+fprintf(stderr,"b\n");
+fprintf(stderr,"----%08lx e\n",data);
 		switch (mode)
 		{
 		case 2:	case 4:	case 6:	res = kirkSendFuseCmd(kirkHeader, 16, true);
@@ -418,7 +420,9 @@ int sceSdCreateList_(pspChnnlsvContext2& ctx2, int mode, int uknw, u8* data, u8*
 		case 1:	case 3:	default:res = kirkSendCmd(kirkHeader, 16, numFromMode2(mode), true);
 		break;
 		}
-
+fprintf(stderr,"d %08lx\n",ctx2.cryptedData);
+fprintf(stderr,"----%08lx e\n",data);
+fprintf(stderr,"c\n");
 		if (type == 87)
 			memxor(kirkData, key19AC, 16);
 		else if (type == 100)
@@ -426,11 +430,14 @@ int sceSdCreateList_(pspChnnlsvContext2& ctx2, int mode, int uknw, u8* data, u8*
 
 		if (res)
 			return res;
-
+fprintf(stderr,"d %08lx\n",ctx2.cryptedData);
 		memcpy(ctx2.cryptedData, kirkData, 16);
+fprintf(stderr,"----%08lx e\n",data);
 		memcpy(data, kirkData, 16);
+fprintf(stderr,"f\n");
 		if (cryptkey)
 			memxor(ctx2.cryptedData, cryptkey, 16);
+fprintf(stderr,"g\n");
 	}
 
 	return 0;
@@ -488,7 +495,7 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
 
         // Setup the buffers.
         int alignedSize = ((size + 0xF) >> 4) << 4;
-        byte tmpbuf[alignedSize];
+        byte *tmpbuf=(byte*)malloc(alignedSize);
         //byte hash[0x10];
 
         // Set the decryption mode.
@@ -507,15 +514,14 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
         sceSdSetIndex_(ctx1, sdDecMode);
         sceSdCreateList_(ctx2, sdDecMode, 2, buf, key);
         sceSdRemoveValue_(ctx1, buf, 0x10);
-        
         arraycopy(buf, 0x10, tmpbuf, 0, size - 0x10);
+
         sceSdRemoveValue_(ctx1, tmpbuf, alignedSize);
-        
         sceSdSetMember_(ctx2, tmpbuf, alignedSize);
-        
+
         // Clear context 2.
         sceChnnlsv_21BE78B4_(ctx2);
-        
+
         // Generate a file hash for this data.
         //sceSdGetLastIndex(ctx1, hash, key);
         
@@ -533,11 +539,11 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
 
         // Setup the buffers.
         int alignedSize = ((size + 0xF) >> 4) << 4;
-        byte tmpbuf1[alignedSize + 0x10];memset(tmpbuf1,0,sizeof(tmpbuf1));
-        byte tmpbuf2[alignedSize];memset(tmpbuf2,0,sizeof(tmpbuf2));
+        byte *tmpbuf1=(byte*)malloc(alignedSize + 0x10);memset(tmpbuf1,0,sizeof(tmpbuf1));
+        byte *tmpbuf2=(byte*)malloc(alignedSize);memset(tmpbuf2,0,sizeof(tmpbuf2));
 
         // Copy the plain data to tmpbuf.
-        arraycopy(buf, 0, tmpbuf1, 0x10, size);
+        memmove(tmpbuf1,buf+0x10,size);
 
         // Set the encryption mode.
         if (isNullKey(key)) {
@@ -550,15 +556,17 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
                 //sdEncMode = 3;
             //}
         }
-
+         fprintf(stderr,"%08lx 1\n",tmpbuf1);
         // Generate the encryption IV (first 0x10 bytes).
         sceSdCreateList_(ctx2, sdEncMode, 1, tmpbuf1, key);
+		fprintf(stderr,"1\n");
         sceSdSetIndex_(ctx1, sdEncMode);
+		fprintf(stderr,"1\n");
         sceSdRemoveValue_(ctx1, tmpbuf1, 0x10);
-        
+                 fprintf(stderr,"2\n");
         arraycopy(tmpbuf1, 0x10, tmpbuf2, 0, alignedSize);
         sceSdSetMember_(ctx2, tmpbuf2, alignedSize);
-        
+         fprintf(stderr,"3\n");
         // Clear extra bytes.
 		int i;
         for (i = 0; i < (alignedSize - size); i++) {
@@ -574,7 +582,7 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
         }
         arraycopy(tmpbuf2, 0, tmpbuf1, 0x10, alignedSize);
         arraycopy(tmpbuf1, 0, buf, 0, size+0x10);
-        
+        fprintf(stderr,"1\n");
         // Clear context 2.
         sceChnnlsv_21BE78B4_(ctx2);
         
@@ -590,7 +598,7 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
         // Generate a new hash using a key.
         sceSdSetIndex_(ctx1, mode);
         sceSdRemoveValue_(ctx1, data, size);
-        sceSdGetLastIndex_(ctx1, hash, key);
+        if(sceSdGetLastIndex_(ctx1, hash, NULL)<0)memset(hash,1,0x10);
         
         //return hash;
     }
@@ -598,10 +606,8 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
     void UpdateSavedataHashes(byte* savedataParams, byte* data, int size) {
         // Setup the params, hashes, modes and key (empty).
         byte key[0x10];memset(key,0,sizeof(key));
-        byte hash_0x70[0x10];memset(hash_0x70,0,sizeof(hash_0x70));
-        byte hash_0x20[0x10];memset(hash_0x20,0,sizeof(hash_0x20));
-        byte hash_0x10[0x10];memset(hash_0x10,0,sizeof(hash_0x10));
-        int mode = 4;
+
+        int mode = 2;
         int check_bit = 1;
 
         // Check for previous SAVEDATA_PARAMS data in the file.
@@ -612,46 +618,40 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
             mode = ((savedataParams[0] >> 4) & 0xF);
             check_bit = ((savedataParams[0]) & 0xF);
         //}
+		memset(savedataParams,0,0x80);
+		if((mode&0x4)==0x4)mode=2;
 
         if ((mode & 0x4) == 0x4) {
             // Generate a type 6 hash.
-            GenerateSavedataHash(data, size, 6, key, hash_0x20);
+            GenerateSavedataHash(data, size, 6, key, savedataParams+0x20);
 			// Generate a type 5 hash.
-			GenerateSavedataHash(data, size, 5, key, hash_0x70);
+			GenerateSavedataHash(data, size, 5, key, savedataParams+0x70);
 			// Set the SAVEDATA_PARAMS byte to 0x41.
-            savedataParams[0] |= 0x40;
+            //savedataParams[0] |= 0x40;
 		} else if((mode & 0x2) == 0x2) {
 			// Generate a type 4 hash.
-            GenerateSavedataHash(data, size, 4, key, hash_0x20);
-            // Generate a type 3 hash.
-            GenerateSavedataHash(data, size, 3, key, hash_0x70);
-			// Set the SAVEDATA_PARAMS byte to 0x21.
+            GenerateSavedataHash(data, size, 4, key, savedataParams+0x20);
+			savedataParams[0]|=0x01;
+
             savedataParams[0] |= 0x20;
+            // Generate a type 3 hash.
+            GenerateSavedataHash(data, size, 3, key, savedataParams+0x70);
+			// Set the SAVEDATA_PARAMS byte to 0x21.
+			//fwrite(savedataParams,1,0x80,stdout);
+
         } else {
             // Generate a type 2 hash.
-            GenerateSavedataHash(data, size, 2, key, hash_0x20);
+            GenerateSavedataHash(data, size, 2, key, savedataParams+0x20);
 			// Set the SAVEDATA_PARAMS byte to 0x21.
-            savedataParams[0] |= 0x00;
+            //savedataParams[0] |= 0x00;
         }
 
 		if ((check_bit & 0x1) == 0x1) {
             // Generate a type 1 hash.
-            GenerateSavedataHash(data, size, 1, key, hash_0x10);
-            // Set the SAVEDATA_PARAMS bit to 0x01.
-            savedataParams[0] |= 0x01;
+            GenerateSavedataHash(data, size, 1, key, savedataParams+0x10);
 		}
+//fwrite(data,1,0x1330,stdout);
 
-        // Store the hashes at the right offsets.
-        arraycopy(hash_0x20, 0, savedataParams, 0x20, 0x10);
-        arraycopy(hash_0x70, 0, savedataParams, 0x70, 0x10);
-        arraycopy(hash_0x10, 0, savedataParams, 0x10, 0x10);
-
-        // Output the final PSF file containing the SAVEDATA param and file hashes.
-        //try {
-        //    psf.put("SAVEDATA_PARAMS", savedataParams);
-        //} catch (Exception e) {
-            // Ignore...
-        //}
     }
 
 unsigned int read32(const void *p){
@@ -682,6 +682,7 @@ int main(int argc, char **argv){
 	}
 	FILE *f=fopen(argv[1],"rb");
 	int size=filelength(fileno(f));
+fprintf(stderr,"%d\n",size);
 	int alignedSize = ((size + 0xF) >> 4) << 4;
 	u8 *inbuf=(u8*)calloc(size+0x10,1);
 	fread(inbuf,1,size,f);
@@ -710,19 +711,18 @@ int main(int argc, char **argv){
 					for(;j<nlabel;j++){
 						if(!strcmp((char*)p+label_offset+read16(p+20+16*j),"SAVEDATA_FILE_LIST")){
 							int paramsize=read32(p+20+16*i+8);
-							u8 param[paramsize];
+							u8 *param=p+data_offset+read32(p+20+16*i+12);
 #ifdef HASHTEST
-							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,stdout); ///
-							memcpy(param,p+data_offset+read32(p+20+16*i+12),paramsize);
-							memset(p+data_offset+read32(p+20+16*i+12),0,paramsize);
-							//UpdateSavedataHashes(p+data_offset+read32(p+20+16*i+12),inbuf,size);
+							fwrite(param,1,paramsize,stdout); ///
 							UpdateSavedataHashes(param,p,sfosize);
-							memcpy(p+data_offset+read32(p+20+16*i+12),param,paramsize); /// these two outputs should be the same
-							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,stdout);
+							fwrite(param,1,paramsize,stdout);
+
+							fseek(f,data_offset+read32(p+20+16*i+12),SEEK_SET);
+							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,f);
 #else
 							EncryptSavedata(inbuf, size, key, p+data_offset+read32(p+20+16*j+12)+0x0d);
 							fwrite(inbuf,1,size+0x10,stdout);
-							UpdateSavedataHashes(p+data_offset+read32(p+20+16*i+12),inbuf,size+0x10);
+							UpdateSavedataHashes(param,p,sfosize);
 							//DecryptSavedata(inbuf, size+0x10, key);
 							//fwrite(inbuf,1,size,stdout);
 
