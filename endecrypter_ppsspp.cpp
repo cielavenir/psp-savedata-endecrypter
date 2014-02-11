@@ -1,6 +1,6 @@
 //PSP SaveData En/Decrypter PPSSPP backend
 
-#include "../endecrypter.h"
+#include "endecrypter.h"
 
 bool isNullKey(u8 *key){
 	if(!key)return true;
