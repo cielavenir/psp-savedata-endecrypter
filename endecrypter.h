@@ -3,6 +3,7 @@
  * kirk-engine (C) draan / proxima
  * jpcsp (C) jpcsp team, especially CryptoEngine by hykem
  * ported by popsdeco (aka @cielavenir)
+ * acknowledgement: referred SED-PC to fix the hashing algorithm
  */
 
 #ifdef __cplusplus

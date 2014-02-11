@@ -1,0 +1,1 @@
+gcc -O2 -o endecrypter endecrypter.c libkirk/*.c

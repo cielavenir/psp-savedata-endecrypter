@@ -644,6 +644,7 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
         } else {
             // Generate a type 2 hash.
             GenerateSavedataHash(data, size, 2, key, savedataParams+0x20);
+			savedataParams[0]|=0x01;
         }
 
 		if ((check_bit & 0x1) == 0x1) {
@@ -670,7 +671,8 @@ int main(int argc, char **argv){
 			"[Proof of Concept/alpha] PSP Savedata En/Decrypter on PC (GPLv3+)\n"
 			"kirk-engine (C) draan / proxima\n"
 			"jpcsp (C) jpcsp team, especially CryptoEngine by hykem\n"
-			"ported by popsdeco\n"
+			"ported by popsdeco (aka @cielavenir)\n"
+			"acknowledgement: referred SED-PC to fix the hashing algorithm\n"
 			"\n"
 			"Decrypt: endecrypter ENC.bin GAMEKEY.bin > DEC.bin\n"
 			"Encrypt: endecrypter DEC.bin GAMEKEY.bin PARAM.SFO > ENC.bin\n"
