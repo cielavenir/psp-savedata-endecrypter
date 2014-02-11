@@ -8,3 +8,15 @@
 
 ### What is better than SED-PC?
 - This can generate PARAM.SFO hash in mode 4.
+
+### Building
+
+#### Get libkirk
+- Attached from 0.0.1 (to comply GPL)
+
+#### jpcsp backend
+- ./compile.sh
+- or, gcc -O2 endecrypter_jpcsp.c libkirk/*.c
+
+#### PPSSPP backend
+- gcc -O2 endecrypter_ppsspp.cpp libkirk/*.c -lstdc++

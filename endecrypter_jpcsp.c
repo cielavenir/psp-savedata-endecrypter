@@ -106,7 +106,7 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
 */
 
         sceUtilsBufferCopyWithRange(buf, size, buf, size, kirk_code);
-        if(kirk_code==KIRK_CMD_ENCRYPT_IV_0)memmove(buf,buf+0x20,size);
+        if(kirk_code==KIRK_CMD_ENCRYPT_IV_0)memmove(buf,buf+20,size);
     }
 
     int getModeSeed(int mode) {
