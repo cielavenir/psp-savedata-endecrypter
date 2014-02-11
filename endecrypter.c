@@ -622,7 +622,7 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
             check_bit = ((savedataParams[0]) & 0xF);
         //}
 		memset(savedataParams,0,0x80);
-		if((mode&0x4)==0x4)mode=2;
+		//if((mode&0x4)==0x4)mode=2;
 
         if ((mode & 0x4) == 0x4) {
             // Generate a type 6 hash.
