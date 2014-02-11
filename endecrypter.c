@@ -52,14 +52,14 @@ bool isNullKey(byte* key) {
     
 void xorHash(byte* dest, int dest_offset, int* src, int src_offset, int size) {
 	int i=0;
-	for (int i = 0; i < size; i++) {
+	for (; i < size; i++) {
 		dest[dest_offset + i] = (byte) (dest[dest_offset + i] ^ src[src_offset + i]);
 	}
 }
     
 void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
 	int i=0;
-	for (int i = 0; i < size; i++) {
+	for (; i < size; i++) {
 		dest[dest_offset + i] = (byte) (dest[dest_offset + i] ^ src[src_offset + i]);
 	}
 }
@@ -189,7 +189,8 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
         // Copy the first 0xC bytes of the obtained key and replicate them
         // across a new list buffer. As a terminator, add the ctx1.seed parameter's
         // 4 bytes (endian swapped) to achieve a full numbered list.
-        for (int i = 0x14; i < (length + 0x14); i += 0x10) {
+		int i=0x14;
+        for (; i < (length + 0x14); i += 0x10) {
             arraycopy(keyBuf, 0x10, dataBuf, i, 0xC);
             dataBuf[i + 0xC] = (byte) (ctx->unk & 0xFF);
             dataBuf[i + 0xD] = (byte) ((ctx->unk >> 8) & 0xFF);
@@ -450,7 +451,8 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
             arraycopy(resultBuf, 0, scrambleResultBuf, 0x14, 0x10);
             ScrambleSD(scrambleResultBuf, 0x10, 0x100, 0x4, 0x05);
             arraycopy(scrambleResultBuf, 0, scrambleResultBuf, 0x14, 0x10);
-            for(int i = 0; i < 0x14; i++) {
+			int i=0;
+            for(; i < 0x14; i++) {
                 scrambleResultBuf[i] = 0;
             }
             ScrambleSD(scrambleResultBuf, 0x10, seed, 0x4, 0x04);
