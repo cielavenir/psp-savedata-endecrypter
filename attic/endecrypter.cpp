@@ -1,4 +1,6 @@
-#include "endecrypter.h"
+//PSP SaveData En/Decrypter PPSSPP backend
+
+#include "../endecrypter.h"
 
 bool isNullKey(u8 *key){
 	if(!key)return true;
@@ -41,8 +43,9 @@ typedef struct _pspChnnlsvContext2 {
 	u8  cryptedData[0x92];
 } pspChnnlsvContext2;
 
-u8 dataBuf[2048+20];
+u8 dataBuf[2048+20+20];
 u8* dataBuf2 = dataBuf + 20;
+u8 kirkHeader[40]; //I don't know why this must be global...
 
 static const u8 hash198C[16] = {0xFA, 0xAA, 0x50, 0xEC, 0x2F, 0xDE, 0x54, 0x93, 0xAD, 0x14, 0xB2, 0xCE, 0xA5, 0x30, 0x05, 0xDF};
 static const u8 hash19BC[16] = {0xCB, 0x15, 0xF4, 0x07, 0xF9, 0x6A, 0x52, 0x3C, 0x04, 0xB9, 0xB2, 0xEE, 0x5C, 0x53, 0xFA, 0x86};
@@ -383,7 +386,6 @@ int sceSdRemoveValue_(pspChnnlsvContext1& ctx, u8* data, int length)
 
 int sceSdCreateList_(pspChnnlsvContext2& ctx2, int mode, int uknw, u8* data, u8* cryptkey)
 {
-fprintf(stderr,"%08lx e\n",data);
 	ctx2.mode = mode;
 	ctx2.unkn = 1;
 	if (uknw == 2)
@@ -396,13 +398,11 @@ fprintf(stderr,"%08lx e\n",data);
 	}
 	else if (uknw == 1)
 	{
-fprintf(stderr,"%08lx e\n",data);
-		u8 kirkHeader[37];
 		u8* kirkData = kirkHeader+20;
 		int res = sub_17A8(kirkHeader);
 		if (res)
 			return res;
-fprintf(stderr,"a\n");
+
 		memcpy(kirkHeader+20, kirkHeader, 16);
 		memset(kirkHeader+32, 0, 4);
 
@@ -411,8 +411,7 @@ fprintf(stderr,"a\n");
 			memxor(kirkData, key199C, 16);
 		else if (type == 100)
 			memxor(kirkData, key19CC, 16);
-fprintf(stderr,"b\n");
-fprintf(stderr,"----%08lx e\n",data);
+
 		switch (mode)
 		{
 		case 2:	case 4:	case 6:	res = kirkSendFuseCmd(kirkHeader, 16, true);
@@ -420,9 +419,7 @@ fprintf(stderr,"----%08lx e\n",data);
 		case 1:	case 3:	default:res = kirkSendCmd(kirkHeader, 16, numFromMode2(mode), true);
 		break;
 		}
-fprintf(stderr,"d %08lx\n",ctx2.cryptedData);
-fprintf(stderr,"----%08lx e\n",data);
-fprintf(stderr,"c\n");
+
 		if (type == 87)
 			memxor(kirkData, key19AC, 16);
 		else if (type == 100)
@@ -430,14 +427,11 @@ fprintf(stderr,"c\n");
 
 		if (res)
 			return res;
-fprintf(stderr,"d %08lx\n",ctx2.cryptedData);
+
 		memcpy(ctx2.cryptedData, kirkData, 16);
-fprintf(stderr,"----%08lx e\n",data);
 		memcpy(data, kirkData, 16);
-fprintf(stderr,"f\n");
 		if (cryptkey)
 			memxor(ctx2.cryptedData, cryptkey, 16);
-fprintf(stderr,"g\n");
 	}
 
 	return 0;
@@ -495,7 +489,7 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
 
         // Setup the buffers.
         int alignedSize = ((size + 0xF) >> 4) << 4;
-        byte *tmpbuf=(byte*)malloc(alignedSize);
+        byte tmpbuf[alignedSize];
         //byte hash[0x10];
 
         // Set the decryption mode.
@@ -539,11 +533,11 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
 
         // Setup the buffers.
         int alignedSize = ((size + 0xF) >> 4) << 4;
-        byte *tmpbuf1=(byte*)malloc(alignedSize + 0x10);memset(tmpbuf1,0,sizeof(tmpbuf1));
-        byte *tmpbuf2=(byte*)malloc(alignedSize);memset(tmpbuf2,0,sizeof(tmpbuf2));
+        byte tmpbuf1[alignedSize + 0x10];memset(tmpbuf1,0,sizeof(tmpbuf1));
+        byte tmpbuf2[alignedSize];memset(tmpbuf2,0,sizeof(tmpbuf2));
 
         // Copy the plain data to tmpbuf.
-        memmove(tmpbuf1,buf+0x10,size);
+        arraycopy(buf, 0, tmpbuf1, 0x10, size);
 
         // Set the encryption mode.
         if (isNullKey(key)) {
@@ -556,17 +550,15 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
                 //sdEncMode = 3;
             //}
         }
-         fprintf(stderr,"%08lx 1\n",tmpbuf1);
+
         // Generate the encryption IV (first 0x10 bytes).
         sceSdCreateList_(ctx2, sdEncMode, 1, tmpbuf1, key);
-		fprintf(stderr,"1\n");
         sceSdSetIndex_(ctx1, sdEncMode);
-		fprintf(stderr,"1\n");
         sceSdRemoveValue_(ctx1, tmpbuf1, 0x10);
-                 fprintf(stderr,"2\n");
+
         arraycopy(tmpbuf1, 0x10, tmpbuf2, 0, alignedSize);
         sceSdSetMember_(ctx2, tmpbuf2, alignedSize);
-         fprintf(stderr,"3\n");
+
         // Clear extra bytes.
 		int i;
         for (i = 0; i < (alignedSize - size); i++) {
@@ -575,14 +567,9 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
         
         // Encrypt the data.
         sceSdRemoveValue_(ctx1, tmpbuf2, alignedSize);
-        
-        // Copy back the encrypted data + IV.
-        for (int i = 0; i < (alignedSize); i++) {
-            tmpbuf1[0x10 + i] = 0;
-        }
         arraycopy(tmpbuf2, 0, tmpbuf1, 0x10, alignedSize);
         arraycopy(tmpbuf1, 0, buf, 0, size+0x10);
-        fprintf(stderr,"1\n");
+
         // Clear context 2.
         sceChnnlsv_21BE78B4_(ctx2);
         
@@ -619,39 +606,34 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
             check_bit = ((savedataParams[0]) & 0xF);
         //}
 		memset(savedataParams,0,0x80);
-		if((mode&0x4)==0x4)mode=2;
+		//if((mode&0x4)==0x4)mode=2;
 
         if ((mode & 0x4) == 0x4) {
             // Generate a type 6 hash.
             GenerateSavedataHash(data, size, 6, key, savedataParams+0x20);
+			savedataParams[0]|=0x01;
+
+            savedataParams[0]|=0x40;
 			// Generate a type 5 hash.
 			GenerateSavedataHash(data, size, 5, key, savedataParams+0x70);
-			// Set the SAVEDATA_PARAMS byte to 0x41.
-            //savedataParams[0] |= 0x40;
 		} else if((mode & 0x2) == 0x2) {
 			// Generate a type 4 hash.
             GenerateSavedataHash(data, size, 4, key, savedataParams+0x20);
 			savedataParams[0]|=0x01;
 
-            savedataParams[0] |= 0x20;
+            savedataParams[0]|=0x20;
             // Generate a type 3 hash.
             GenerateSavedataHash(data, size, 3, key, savedataParams+0x70);
-			// Set the SAVEDATA_PARAMS byte to 0x21.
-			//fwrite(savedataParams,1,0x80,stdout);
-
         } else {
             // Generate a type 2 hash.
             GenerateSavedataHash(data, size, 2, key, savedataParams+0x20);
-			// Set the SAVEDATA_PARAMS byte to 0x21.
-            //savedataParams[0] |= 0x00;
+			savedataParams[0]|=0x01;
         }
 
 		if ((check_bit & 0x1) == 0x1) {
             // Generate a type 1 hash.
             GenerateSavedataHash(data, size, 1, key, savedataParams+0x10);
 		}
-//fwrite(data,1,0x1330,stdout);
-
     }
 
 unsigned int read32(const void *p){
@@ -669,10 +651,11 @@ int main(int argc, char **argv){
 	initstdio();
 	if(argc<3){
 		fprintf(stderr,
-			"[Proof of Concept/beta] PSP Savedata En/Decrypter on PC (GPLv3+)\n"
+			"[Proof of Concept/alpha] PSP Savedata En/Decrypter on PC (GPLv3+)\n"
 			"kirk-engine (C) draan / proxima\n"
 			"jpcsp (C) jpcsp team, especially CryptoEngine by hykem\n"
-			"ported by popsdeco\n"
+			"ported by popsdeco (aka @cielavenir)\n"
+			"acknowledgement: referred SED-PC to fix the hashing algorithm\n"
 			"\n"
 			"Decrypt: endecrypter ENC.bin GAMEKEY.bin > DEC.bin\n"
 			"Encrypt: endecrypter DEC.bin GAMEKEY.bin PARAM.SFO > ENC.bin\n"
@@ -682,8 +665,7 @@ int main(int argc, char **argv){
 	}
 	FILE *f=fopen(argv[1],"rb");
 	int size=filelength(fileno(f));
-fprintf(stderr,"%d\n",size);
-	int alignedSize = ((size + 0xF) >> 4) << 4;
+	//int alignedSize = ((size + 0xF) >> 4) << 4;
 	u8 *inbuf=(u8*)calloc(size+0x10,1);
 	fread(inbuf,1,size,f);
 	fclose(f);
@@ -742,7 +724,7 @@ fprintf(stderr,"%d\n",size);
 		}
 	}else{
 		DecryptSavedata(inbuf, size, key);
-		fwrite(inbuf,1,alignedSize-0x10,stdout);
+		fwrite(inbuf,1,size-0x10,stdout);
 	}
 	free(inbuf);
 	return 0;

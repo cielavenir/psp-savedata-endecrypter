@@ -1,4 +1,4 @@
-## SaveData En/Decrypter on PC (GPLv3+)
+## PSP SaveData En/Decrypter on PC (GPLv3+)
 - kirk-engine (C) draan / proxima
 - jpcsp (C) jpcsp team, especially CryptoEngine by hykem
 - ported by popsdeco (aka @cielavenir)

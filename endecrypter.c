@@ -1,3 +1,5 @@
+//PSP SaveData En/Decrypter jpcsp backend
+
 #include "endecrypter.h"
 
 /*
@@ -104,6 +106,7 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
 */
 
         sceUtilsBufferCopyWithRange(buf, size, buf, size, kirk_code);
+        if(kirk_code==KIRK_CMD_ENCRYPT_IV_0)memmove(buf,buf+0x20,size);
     }
 
     int getModeSeed(int mode) {
@@ -634,7 +637,6 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
             savedataParams[0]|=0x40;
 			// Generate a type 5 hash.
 			GenerateSavedataHash(data, size, 5, key, savedataParams+0x70);
-            //savedataParams[0] |= 0x40;
 		} else if((mode & 0x2) == 0x2) {
 			// Generate a type 4 hash.
             GenerateSavedataHash(data, size, 4, key, savedataParams+0x20);
