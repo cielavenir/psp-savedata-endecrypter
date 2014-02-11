@@ -627,26 +627,23 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
         if ((mode & 0x4) == 0x4) {
             // Generate a type 6 hash.
             GenerateSavedataHash(data, size, 6, key, savedataParams+0x20);
+			savedataParams[0]|=0x01;
+
+            savedataParams[0]|=0x40;
 			// Generate a type 5 hash.
 			GenerateSavedataHash(data, size, 5, key, savedataParams+0x70);
-			// Set the SAVEDATA_PARAMS byte to 0x41.
             //savedataParams[0] |= 0x40;
 		} else if((mode & 0x2) == 0x2) {
 			// Generate a type 4 hash.
             GenerateSavedataHash(data, size, 4, key, savedataParams+0x20);
 			savedataParams[0]|=0x01;
 
-            savedataParams[0] |= 0x20;
+            savedataParams[0]|=0x20;
             // Generate a type 3 hash.
             GenerateSavedataHash(data, size, 3, key, savedataParams+0x70);
-			// Set the SAVEDATA_PARAMS byte to 0x21.
-			//fwrite(savedataParams,1,0x80,stdout);
-
         } else {
             // Generate a type 2 hash.
             GenerateSavedataHash(data, size, 2, key, savedataParams+0x20);
-			// Set the SAVEDATA_PARAMS byte to 0x21.
-            //savedataParams[0] |= 0x00;
         }
 
 		if ((check_bit & 0x1) == 0x1) {
@@ -670,7 +667,7 @@ int main(int argc, char **argv){
 	initstdio();
 	if(argc<3){
 		fprintf(stderr,
-			"[Proof of Concept/beta] PSP Savedata En/Decrypter on PC (GPLv3+)\n"
+			"[Proof of Concept/alpha] PSP Savedata En/Decrypter on PC (GPLv3+)\n"
 			"kirk-engine (C) draan / proxima\n"
 			"jpcsp (C) jpcsp team, especially CryptoEngine by hykem\n"
 			"ported by popsdeco\n"
@@ -683,7 +680,7 @@ int main(int argc, char **argv){
 	}
 	FILE *f=fopen(argv[1],"rb");
 	int size=filelength(fileno(f));
-	int alignedSize = ((size + 0xF) >> 4) << 4;
+	//int alignedSize = ((size + 0xF) >> 4) << 4;
 	char *inbuf=calloc(size+0x10,1);
 	fread(inbuf,1,size,f);
 	fclose(f);
@@ -742,7 +739,7 @@ int main(int argc, char **argv){
 		}
 	}else{
 		DecryptSavedata(inbuf, size, key);
-		fwrite(inbuf,1,alignedSize-0x10,stdout);
+		fwrite(inbuf,1,size-0x10,stdout);
 	}
 	free(inbuf);
 	return 0;
