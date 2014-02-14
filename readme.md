@@ -9,6 +9,9 @@
 ### What is better than SED-PC?
 - This can generate PARAM.SFO hash in mode 4.
 
+### Binary Distribution
+- https://www.dropbox.com/s/mj92ccgvwoit746/savedata-endecrypter/
+
 ### Building
 
 #### Get libkirk
