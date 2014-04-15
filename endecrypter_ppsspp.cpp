@@ -61,7 +61,7 @@ void *memxor(void * dest, const void * src, size_t n)
   char *d = (char*)dest;
 
   for (; n > 0; n--)
-    *d++ ^= *s++;
+	*d++ ^= *s++;
 
   return dest;
 }
@@ -106,7 +106,7 @@ int numFromMode2(int mode)
 int typeFromMode(int mode)
 {
 	return (mode == 1 || mode == 2) ? 83 :
-	      ((mode == 3 || mode == 4) ? 87 : 100);	
+		  ((mode == 3 || mode == 4) ? 87 : 100);	
 }
 
 int kirkSendCmd(u8* data, int length, int num, bool encrypt)
@@ -484,157 +484,168 @@ int sceChnnlsv_21BE78B4_(pspChnnlsvContext2& ctx)
 void DecryptSavedata(u8 *buf, int size, u8 *key) {
 	// Initialize the context structs.
 	int sdDecMode;
-        pspChnnlsvContext1 ctx1;memset(&ctx1,0,sizeof(ctx1));
-        pspChnnlsvContext2 ctx2;memset(&ctx2,0,sizeof(ctx2));
+	pspChnnlsvContext1 ctx1;memset(&ctx1,0,sizeof(ctx1));
+	pspChnnlsvContext2 ctx2;memset(&ctx2,0,sizeof(ctx2));
 
-        // Setup the buffers.
-        int alignedSize = ((size + 0xF) >> 4) << 4;
-        byte tmpbuf[alignedSize];
-        //byte hash[0x10];
+	// Setup the buffers.
+	int alignedSize = ((size + 0xF) >> 4) << 4;
+	byte tmpbuf[alignedSize];
+	//byte hash[0x10];
 
-        // Set the decryption mode.
-        if (isNullKey(key)) {
-            sdDecMode = 1;
-        } else {
-            // After firmware version 2.5.2 the decryption mode used is 5.
-            //if (Emulator.getInstance().getFirmwareVersion() > 252) {
-                sdDecMode = 5;
-            //} else {
-            //    sdDecMode = 3;
-            //}
-        }
+	// Set the decryption mode.
+	if (isNullKey(key)) {
+		sdDecMode = 1;
+	} else {
+		// After firmware version 2.5.2 the decryption mode used is 5.
+		//if (Emulator.getInstance().getFirmwareVersion() > 252) {
+			sdDecMode = 5;
+		//} else {
+		//	sdDecMode = 3;
+		//}
+	}
 
-        // Perform the decryption.
-        sceSdSetIndex_(ctx1, sdDecMode);
-        sceSdCreateList_(ctx2, sdDecMode, 2, buf, key);
-        sceSdRemoveValue_(ctx1, buf, 0x10);
-        arraycopy(buf, 0x10, tmpbuf, 0, size - 0x10);
+	// Perform the decryption.
+	sceSdSetIndex_(ctx1, sdDecMode);
+	sceSdCreateList_(ctx2, sdDecMode, 2, buf, key);
+	sceSdRemoveValue_(ctx1, buf, 0x10);
+	arraycopy(buf, 0x10, tmpbuf, 0, size - 0x10);
 
-        sceSdRemoveValue_(ctx1, tmpbuf, alignedSize);
-        sceSdSetMember_(ctx2, tmpbuf, alignedSize);
+	sceSdRemoveValue_(ctx1, tmpbuf, alignedSize);
+	sceSdSetMember_(ctx2, tmpbuf, alignedSize);
 
-        // Clear context 2.
-        sceChnnlsv_21BE78B4_(ctx2);
+	// Clear context 2.
+	sceChnnlsv_21BE78B4_(ctx2);
 
-        // Generate a file hash for this data.
-        //sceSdGetLastIndex(ctx1, hash, key);
-        
-        // Copy back the data.
-        arraycopy(tmpbuf, 0, buf, 0, size - 0x10);
+	// Generate a file hash for this data.
+	//sceSdGetLastIndex(ctx1, hash, key);
+		
+	// Copy back the data.
+	arraycopy(tmpbuf, 0, buf, 0, size - 0x10);
 
-        //return hash;
-    }
+	//return hash;
+}
 
-    void EncryptSavedata(byte* buf, int size, byte *key, byte *hash) {
-        // Initialize the context structs.
-        int sdEncMode;
-        pspChnnlsvContext1 ctx1;memset(&ctx1,0,sizeof(ctx1));
-        pspChnnlsvContext2 ctx2;memset(&ctx2,0,sizeof(ctx2));
+void EncryptSavedata(byte* buf, int size, byte *key, byte *hash, byte *iv) {
+	// Initialize the context structs.
+	int sdEncMode;
+	pspChnnlsvContext1 ctx1;memset(&ctx1,0,sizeof(ctx1));
+	pspChnnlsvContext2 ctx2;memset(&ctx2,0,sizeof(ctx2));
 
-        // Setup the buffers.
-        int alignedSize = ((size + 0xF) >> 4) << 4;
-        byte tmpbuf1[alignedSize + 0x10];memset(tmpbuf1,0,sizeof(tmpbuf1));
-        byte tmpbuf2[alignedSize];memset(tmpbuf2,0,sizeof(tmpbuf2));
+	// Setup the buffers.
+	int alignedSize = ((size + 0xF) >> 4) << 4;
+	byte header[0x10];memset(header,0,sizeof(header));
+	byte tmpbuf[alignedSize];memset(tmpbuf,0,sizeof(tmpbuf));
 
-        // Copy the plain data to tmpbuf.
-        arraycopy(buf, 0, tmpbuf1, 0x10, size);
+	// Copy the plain data to tmpbuf.
+	arraycopy(buf, 0, tmpbuf, 0, size);
 
-        // Set the encryption mode.
-        if (isNullKey(key)) {
-            sdEncMode = 1;
-        } else {
-            // After firmware version 2.5.2 the encryption mode used is 5.
-            //if (Emulator.getInstance().getFirmwareVersion() > 252) {
-                sdEncMode = 5;
-            //} else {
-                //sdEncMode = 3;
-            //}
-        }
+	// Set the encryption mode.
+	if (isNullKey(key)) {
+		sdEncMode = 1;
+	} else {
+		// After firmware version 2.5.2 the encryption mode used is 5.
+		//if (Emulator.getInstance().getFirmwareVersion() > 252) {
+			sdEncMode = 5;
+		//} else {
+			//sdEncMode = 3;
+		//}
+	}
 
-        // Generate the encryption IV (first 0x10 bytes).
-        sceSdCreateList_(ctx2, sdEncMode, 1, tmpbuf1, key);
-        sceSdSetIndex_(ctx1, sdEncMode);
-        sceSdRemoveValue_(ctx1, tmpbuf1, 0x10);
-
-        arraycopy(tmpbuf1, 0x10, tmpbuf2, 0, alignedSize);
-        sceSdSetMember_(ctx2, tmpbuf2, alignedSize);
-
-        // Clear extra bytes.
-		int i;
-        for (i = 0; i < (alignedSize - size); i++) {
-            tmpbuf2[size + i] = 0;
-        }
-        
-        // Encrypt the data.
-        sceSdRemoveValue_(ctx1, tmpbuf2, alignedSize);
-        arraycopy(tmpbuf2, 0, tmpbuf1, 0x10, alignedSize);
-        arraycopy(tmpbuf1, 0, buf, 0, size+0x10);
-
-        // Clear context 2.
-        sceChnnlsv_21BE78B4_(ctx2);
-        
-        // Generate a file hash for this data.
-        sceSdGetLastIndex_(ctx1, hash, key);
-
-        //return hash;
-    }
-
-    void GenerateSavedataHash(byte *data, int size, int mode, byte* key, byte *hash) {
-        pspChnnlsvContext1 ctx1;memset(&ctx1,0,sizeof(ctx1));
-
-        // Generate a new hash using a key.
-        sceSdSetIndex_(ctx1, mode);
-        sceSdRemoveValue_(ctx1, data, size);
-        if(sceSdGetLastIndex_(ctx1, hash, NULL)<0)memset(hash,1,0x10);
-        
-        //return hash;
-    }
-
-    void UpdateSavedataHashes(byte* savedataParams, byte* data, int size) {
-        // Setup the params, hashes, modes and key (empty).
-        byte key[0x10];memset(key,0,sizeof(key));
-
-        int mode = 2;
-        int check_bit = 1;
-
-        // Check for previous SAVEDATA_PARAMS data in the file.
-        //Object savedataParamsOld = psf.get("SAVEDATA_PARAMS");
-        //if (savedataParamsOld != null) {
-            // Extract the mode setup from the already existing data.
-            //byte[] savedataParamsOldArray = (byte[]) savedataParamsOld;
-            mode = ((savedataParams[0] >> 4) & 0xF);
-            check_bit = ((savedataParams[0]) & 0xF);
-        //}
-		memset(savedataParams,0,0x80);
-		//if((mode&0x4)==0x4)mode=2;
-
-        if ((mode & 0x4) == 0x4) {
-            // Generate a type 6 hash.
-            GenerateSavedataHash(data, size, 6, key, savedataParams+0x20);
-			savedataParams[0]|=0x01;
-
-            savedataParams[0]|=0x40;
-			// Generate a type 5 hash.
-			GenerateSavedataHash(data, size, 5, key, savedataParams+0x70);
-		} else if((mode & 0x2) == 0x2) {
-			// Generate a type 4 hash.
-            GenerateSavedataHash(data, size, 4, key, savedataParams+0x20);
-			savedataParams[0]|=0x01;
-
-            savedataParams[0]|=0x20;
-            // Generate a type 3 hash.
-            GenerateSavedataHash(data, size, 3, key, savedataParams+0x70);
-        } else {
-            // Generate a type 2 hash.
-            GenerateSavedataHash(data, size, 2, key, savedataParams+0x20);
-			savedataParams[0]|=0x01;
-        }
-
-		if ((check_bit & 0x1) == 0x1) {
-            // Generate a type 1 hash.
-            GenerateSavedataHash(data, size, 1, key, savedataParams+0x10);
+	// Generate the encryption IV (first 0x10 bytes).
+	if(!iv){
+		sceSdCreateList_(&ctx2, sdEncMode, 1, header, key);
+	}else{
+		ctx2.mode = sdEncMode;
+		ctx2.unk = 0x1;
+		memcpy(ctx2.buf,iv,0x10);
+		if (!isNullKey(key)) {
+			xorKey(ctx2.buf, 0, key, 0, 0x10);
 		}
-    }
+		memcpy(header,iv,0x10); //actually the same
+	}
+	sceSdSetIndex_(ctx1, sdEncMode);
+	sceSdRemoveValue_(ctx1, header, 0x10);
+
+	sceSdSetMember_(ctx2, tmpbuf, alignedSize);
+
+	// Clear extra bytes.
+	int i;
+	for (i = 0; i < (alignedSize - size); i++) {
+		tmpbuf[size + i] = 0;
+	}
+		
+	// Encrypt the data.
+	sceSdRemoveValue_(ctx1, tmpbuf, alignedSize);
+
+	// Copy back the encrypted data + IV.
+	arraycopy(header, 0, buf, 0, 0x10);
+	arraycopy(tmpbuf, 0, buf, 0x10, size);
+
+	// Clear context 2.
+	sceChnnlsv_21BE78B4_(ctx2);
+		
+	// Generate a file hash for this data.
+	sceSdGetLastIndex_(ctx1, hash, key);
+
+	//return hash;
+}
+
+void GenerateSavedataHash(byte *data, int size, int mode, byte* key, byte *hash) {
+	pspChnnlsvContext1 ctx1;memset(&ctx1,0,sizeof(ctx1));
+
+	// Generate a new hash using a key.
+	sceSdSetIndex_(ctx1, mode);
+	sceSdRemoveValue_(ctx1, data, size);
+	if(sceSdGetLastIndex_(ctx1, hash, NULL)<0)memset(hash,1,0x10);
+		
+	//return hash;
+}
+
+void UpdateSavedataHashes(byte* savedataParams, byte* data, int size) {
+	// Setup the params, hashes, modes and key (empty).
+	byte key[0x10];memset(key,0,sizeof(key));
+
+	int mode = 2;
+	int check_bit = 1;
+
+	// Check for previous SAVEDATA_PARAMS data in the file.
+	//Object savedataParamsOld = psf.get("SAVEDATA_PARAMS");
+	//if (savedataParamsOld != null) {
+		// Extract the mode setup from the already existing data.
+		//byte[] savedataParamsOldArray = (byte[]) savedataParamsOld;
+		mode = ((savedataParams[0] >> 4) & 0xF);
+		check_bit = ((savedataParams[0]) & 0xF);
+	//}
+	memset(savedataParams,0,0x80);
+	//if((mode&0x4)==0x4)mode=2;
+
+	if ((mode & 0x4) == 0x4) {
+		// Generate a type 6 hash.
+		GenerateSavedataHash(data, size, 6, key, savedataParams+0x20);
+		savedataParams[0]|=0x01;
+
+		savedataParams[0]|=0x40;
+		// Generate a type 5 hash.
+		GenerateSavedataHash(data, size, 5, key, savedataParams+0x70);
+	} else if((mode & 0x2) == 0x2) {
+		// Generate a type 4 hash.
+		GenerateSavedataHash(data, size, 4, key, savedataParams+0x20);
+		savedataParams[0]|=0x01;
+
+		savedataParams[0]|=0x20;
+		// Generate a type 3 hash.
+		GenerateSavedataHash(data, size, 3, key, savedataParams+0x70);
+	} else {
+		// Generate a type 2 hash.
+		GenerateSavedataHash(data, size, 2, key, savedataParams+0x20);
+		savedataParams[0]|=0x01;
+	}
+
+	if ((check_bit & 0x1) == 0x1) {
+		// Generate a type 1 hash.
+		GenerateSavedataHash(data, size, 1, key, savedataParams+0x10);
+	}
+}
 
 unsigned int read32(const void *p){
 	const unsigned char *x=(const unsigned char*)p;
@@ -691,29 +702,29 @@ int main(int argc, char **argv){
 			for(;i<nlabel;i++){
 				if(!strcmp((char*)p+label_offset+read16(p+20+16*i),"SAVEDATA_PARAMS")){
 					for(;j<nlabel;j++){
-						if(!strcmp((char*)p+label_offset+read16(p+20+16*j),"SAVEDATA_FILE_LIST")){
+						if(!strcmp(p+label_offset+read16(p+20+16*j),"SAVEDATA_FILE_LIST")){
 							int paramsize=read32(p+20+16*i+8);
 							u8 *param=p+data_offset+read32(p+20+16*i+12);
-#ifdef HASHTEST
-							fwrite(param,1,paramsize,stdout); ///
-							UpdateSavedataHashes(param,p,sfosize);
-							fwrite(param,1,paramsize,stdout);
-
-							fseek(f,data_offset+read32(p+20+16*i+12),SEEK_SET);
-							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,f);
-#else
-							EncryptSavedata(inbuf, size, key, p+data_offset+read32(p+20+16*j+12)+0x0d);
+#if 0
+							//This can be used for checking SAVEDATA_FILE_LIST hash.
+							byte iv[0x10];
+							byte savehash[0x10];
+							memcpy(iv,inbuf,0x10);
+							memcpy(savehash,p+data_offset+read32(p+20+16*j+12)+0x0d,0x10);
+							DecryptSavedata(inbuf, size, key);
+							EncryptSavedata(inbuf, size-0x10, key, p+data_offset+read32(p+20+16*j+12)+0x0d,iv);
+							printf("%d\n",memcmp(p+data_offset+read32(p+20+16*j+12)+0x0d,savehash,0x10));
+#endif
+							EncryptSavedata(inbuf, size, key, p+data_offset+read32(p+20+16*j+12)+0x0d,NULL);
 							fwrite(inbuf,1,size+0x10,stdout);
+							//This hash is different from original one, but PSP somehow accepts it...
 							UpdateSavedataHashes(param,p,sfosize);
-							//DecryptSavedata(inbuf, size+0x10, key);
-							//fwrite(inbuf,1,size,stdout);
 
 							//write back
 							fseek(f,data_offset+read32(p+20+16*i+12),SEEK_SET);
 							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,f);
 							fseek(f,data_offset+read32(p+20+16*j+12)+0x0d,SEEK_SET);
 							fwrite(p+data_offset+read32(p+20+16*j+12)+0x0d,1,0x10,f);
-#endif
 							break;
 						}
 					}
