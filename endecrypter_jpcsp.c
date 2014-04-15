@@ -544,7 +544,7 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
         //return hash;
     }
 
-    void EncryptSavedata(byte* buf, int size, byte *key, byte *hash) {
+    void EncryptSavedata(byte* buf, int size, byte *key, byte *hash, byte *iv) {
         // Initialize the context structs.
         int sdEncMode;
         _SD_Ctx1 ctx1;memset(&ctx1,0,sizeof(ctx1));
@@ -552,11 +552,11 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
 
         // Setup the buffers.
         int alignedSize = ((size + 0xF) >> 4) << 4;
-        byte tmpbuf1[alignedSize + 0x10];memset(tmpbuf1,0,sizeof(tmpbuf1));
-        byte tmpbuf2[alignedSize];memset(tmpbuf2,0,sizeof(tmpbuf2));
+        byte header[0x10];memset(header,0,sizeof(header));
+        byte tmpbuf[alignedSize];memset(tmpbuf,0,sizeof(tmpbuf));
 
         // Copy the plain data to tmpbuf.
-        arraycopy(buf, 0, tmpbuf1, 0x10, size);
+        arraycopy(buf, 0, tmpbuf, 0, size);
 
         // Set the encryption mode.
         if (isNullKey(key)) {
@@ -571,25 +571,34 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
         }
 
         // Generate the encryption IV (first 0x10 bytes).
-        hleSdCreateList(&ctx2, sdEncMode, 1, tmpbuf1, key);
+        if(!iv){
+			hleSdCreateList(&ctx2, sdEncMode, 1, header, key);
+		}else{
+        	ctx2.mode = sdEncMode;
+        	ctx2.unk = 0x1;
+			memcpy(ctx2.buf,iv,0x10);
+            if (!isNullKey(key)) {
+            	xorKey(ctx2.buf, 0, key, 0, 0x10);
+            }
+			memcpy(header,iv,0x10); //actually the same
+		}
         hleSdSetIndex(&ctx1, sdEncMode);
-        hleSdRemoveValue(&ctx1, tmpbuf1, 0x10);
-        
-        arraycopy(tmpbuf1, 0x10, tmpbuf2, 0, alignedSize);
-        hleSdSetMember(&ctx2, tmpbuf2, alignedSize);
+        hleSdRemoveValue(&ctx1, header, 0x10);
+
+        hleSdSetMember(&ctx2, tmpbuf, alignedSize);
         
         // Clear extra bytes.
 		int i;
         for (i = 0; i < (alignedSize - size); i++) {
-            tmpbuf2[size + i] = 0;
+            tmpbuf[size + i] = 0;
         }
         
         // Encrypt the data.
-        hleSdRemoveValue(&ctx1, tmpbuf2, alignedSize);
+        hleSdRemoveValue(&ctx1, tmpbuf, alignedSize);
         
         // Copy back the encrypted data + IV.
-        arraycopy(tmpbuf2, 0, tmpbuf1, 0x10, alignedSize);
-        arraycopy(tmpbuf1, 0, buf, 0, size+0x10);
+		arraycopy(header, 0, buf, 0, 0x10);
+        arraycopy(tmpbuf, 0, buf, 0x10, size);
         
         // Clear context 2.
         hleChnnlsv_21BE78B4(&ctx2);
@@ -715,26 +724,26 @@ int main(int argc, char **argv){
 						if(!strcmp(p+label_offset+read16(p+20+16*j),"SAVEDATA_FILE_LIST")){
 							int paramsize=read32(p+20+16*i+8);
 							u8 *param=p+data_offset+read32(p+20+16*i+12);
-#ifdef HASHTEST
-							fwrite(param,1,paramsize,stdout); ///
-							UpdateSavedataHashes(param,p,sfosize);
-							fwrite(param,1,paramsize,stdout);
-
-							fseek(f,data_offset+read32(p+20+16*i+12),SEEK_SET);
-							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,f);
-#else
-							EncryptSavedata(inbuf, size, key, p+data_offset+read32(p+20+16*j+12)+0x0d);
+#if 0
+							//This can be used for checking SAVEDATA_FILE_LIST hash.
+							byte iv[0x10];
+							byte savehash[0x10];
+							memcpy(iv,inbuf,0x10);
+							memcpy(savehash,p+data_offset+read32(p+20+16*j+12)+0x0d,0x10);
+							DecryptSavedata(inbuf, size, key);
+							EncryptSavedata(inbuf, size-0x10, key, p+data_offset+read32(p+20+16*j+12)+0x0d,iv);
+							printf("%d\n",memcmp(p+data_offset+read32(p+20+16*j+12)+0x0d,savehash,0x10));
+#endif
+							EncryptSavedata(inbuf, size, key, p+data_offset+read32(p+20+16*j+12)+0x0d,NULL);
 							fwrite(inbuf,1,size+0x10,stdout);
+							//This hash is different from original one, but PSP somehow accepts it...
 							UpdateSavedataHashes(param,p,sfosize);
-							//DecryptSavedata(inbuf, size+0x10, key);
-							//fwrite(inbuf,1,size,stdout);
 
 							//write back
 							fseek(f,data_offset+read32(p+20+16*i+12),SEEK_SET);
 							fwrite(p+data_offset+read32(p+20+16*i+12),1,paramsize,f);
 							fseek(f,data_offset+read32(p+20+16*j+12)+0x0d,SEEK_SET);
 							fwrite(p+data_offset+read32(p+20+16*j+12)+0x0d,1,0x10,f);
-#endif
 							break;
 						}
 					}
