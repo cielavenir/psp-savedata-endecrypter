@@ -51,14 +51,14 @@ bool isNullKey(byte* key) {
 	}
 	return true;
 }
-	
+
 void xorHash(byte* dest, int dest_offset, int* src, int src_offset, int size) {
 	int i=0;
 	for (; i < size; i++) {
 		dest[dest_offset + i] = (byte) (dest[dest_offset + i] ^ src[src_offset + i]);
 	}
 }
-	
+
 void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
 	int i=0;
 	for (; i < size; i++) {
@@ -244,7 +244,7 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
 			// Generate SHA-1 to act as seed for encryption.
 			//ByteBuffer bSeed = ByteBuffer.wrap(seed);
 			sceUtilsBufferCopyWithRange(seed, 0x14, NULL, 0, 0xE);
-					   
+			
 			// Propagate SHA-1 in kirk header.
 			arraycopy(seed, 0, header, 0, 0x10);
 			arraycopy(seed, 0, header, 0x14, 0x10);
@@ -342,7 +342,7 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
 			// Calculate the seed.
 			int seed = getModeSeed(ctx->mode);
 
-			// Setup the buffers. 
+			// Setup the buffers.
 			byte scrambleBuf[(length + ctx->padSize) + 0x14];
 
 			// Copy the previous key to the buffer.
@@ -394,7 +394,7 @@ void xorKey(byte* dest, int dest_offset, byte* src, int src_offset, int size) {
 			return -1;
 		}
 
-		// Setup the buffers.		   
+		// Setup the buffers.
 		byte scrambleEmptyBuf[0x10 + 0x14];memset(scrambleEmptyBuf,0,sizeof(scrambleEmptyBuf));
 		byte keyBuf[0x10];memset(keyBuf,0,sizeof(keyBuf));
 		byte scrambleKeyBuf[0x10 + 0x14];memset(scrambleKeyBuf,0,sizeof(scrambleKeyBuf));
@@ -531,13 +531,13 @@ void DecryptSavedata(byte *buf, int size, byte *key) {
 	hleSdRemoveValue(&ctx1, tmpbuf, alignedSize);
 
 	hleSdSetMember(&ctx2, tmpbuf, alignedSize);
-		
+
 	// Clear context 2.
 	hleChnnlsv_21BE78B4(&ctx2);
-		
+
 	// Generate a file hash for this data.
 	//hleSdGetLastIndex(&ctx1, hash, key);
-		
+
 	// Copy back the data.
 	arraycopy(tmpbuf, 0, buf, 0, size - 0x10);
 
@@ -592,17 +592,17 @@ void EncryptSavedata(byte* buf, int size, byte *key, byte *hash, byte *iv) {
 	for (i = 0; i < (alignedSize - size); i++) {
 		tmpbuf[size + i] = 0;
 	}
-		
+
 	// Encrypt the data.
 	hleSdRemoveValue(&ctx1, tmpbuf, alignedSize);
-		
+
 	// Copy back the encrypted data + IV.
 	arraycopy(header, 0, buf, 0, 0x10);
 	arraycopy(tmpbuf, 0, buf, 0x10, size);
-		
+
 	// Clear context 2.
 	hleChnnlsv_21BE78B4(&ctx2);
-		
+
 	// Generate a file hash for this data.
 	hleSdGetLastIndex(&ctx1, hash, key);
 
@@ -616,7 +616,7 @@ void GenerateSavedataHash(byte *data, int size, int mode, byte* key, byte *hash)
 	hleSdSetIndex(&ctx1, mode);
 	hleSdRemoveValue(&ctx1, data, size);
 	if(hleSdGetLastIndex(&ctx1, hash, NULL)<0)memset(hash,1,0x10);
-		
+
 	//return hash;
 }
 
