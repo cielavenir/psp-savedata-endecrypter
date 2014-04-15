@@ -518,7 +518,7 @@ void DecryptSavedata(u8 *buf, int size, u8 *key) {
 
 	// Generate a file hash for this data.
 	//sceSdGetLastIndex(ctx1, hash, key);
-		
+
 	// Copy back the data.
 	arraycopy(tmpbuf, 0, buf, 0, size - 0x10);
 
@@ -573,7 +573,7 @@ void EncryptSavedata(byte* buf, int size, byte *key, byte *hash, byte *iv) {
 	for (i = 0; i < (alignedSize - size); i++) {
 		tmpbuf[size + i] = 0;
 	}
-		
+
 	// Encrypt the data.
 	sceSdRemoveValue_(ctx1, tmpbuf, alignedSize);
 
@@ -583,7 +583,7 @@ void EncryptSavedata(byte* buf, int size, byte *key, byte *hash, byte *iv) {
 
 	// Clear context 2.
 	sceChnnlsv_21BE78B4_(ctx2);
-		
+
 	// Generate a file hash for this data.
 	sceSdGetLastIndex_(ctx1, hash, key);
 
