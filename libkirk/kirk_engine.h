@@ -134,6 +134,7 @@ typedef struct
 } KIRK_CMD17_BUFFER;//0x64
 
 //mode passed to sceUtilsBufferCopyWithRange
+#define KIRK_CMD_ENCRYPT_PRIVATE 0
 #define KIRK_CMD_DECRYPT_PRIVATE 1
 #define KIRK_CMD_2 2
 #define KIRK_CMD_3 3
@@ -219,6 +220,8 @@ int sceUtilsSetFuseID(u8*fuse);
 int sceUtilsBufferCopyWithRange(u8* outbuff, int outsize, u8* inbuff, int insize, int cmd);
 void decrypt_kirk16_private(u8 *dA_out, u8 *dA_enc);
 void encrypt_kirk16_private(u8 *dA_out, u8 *dA_dec);
+
+void secret_keygen( u8 *keyout);
 
 // Prototypes for the Elliptic Curve and Big Number functions
 int ecdsa_get_params(u32 type, u8 *p, u8 *a, u8 *b, u8 *N, u8 *Gx, u8 *Gy);
