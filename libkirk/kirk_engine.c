@@ -275,6 +275,7 @@ int kirk_CMD1(u8* outbuff, u8* inbuff, int size)
   
   if(header->ecdsa_hash == 1)
   {
+#if 0
   	SHA_CTX sha;
   	KIRK_CMD1_ECDSA_HEADER* eheader = (KIRK_CMD1_ECDSA_HEADER*) inbuff;
   	u8 kirk1_pub[40];
@@ -298,7 +299,7 @@ int kirk_CMD1(u8* outbuff, u8* inbuff, int size)
 	  if(!ecdsa_verify(data_hash,eheader->data_sig_r,eheader->data_sig_s)) {
 	    return KIRK_DATA_HASH_INVALID;
 	  }
-
+#endif
   } else  {
     int ret = kirk_CMD10(inbuff, size);
     if(ret != KIRK_OPERATION_SUCCESS) return ret;
